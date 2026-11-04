@@ -99,6 +99,12 @@ test('owner dashboard protects data and applies reviewed gifts and adjustments o
     await items.getByRole('spinbutton', {name: 'Quantity', exact: true}).fill('3');
     await commit(items, 'A few treats');
     await expect(page.getByText('Apple × 3', {exact: true})).toBeVisible();
+    await items.locator('select[name=operation]').selectOption('replace');
+    await items.locator('select[name=item]').selectOption('apple');
+    await items.locator('select[name=replacement]').selectOption('fish');
+    await items.getByRole('spinbutton', {name: 'Quantity', exact: true}).fill('2');
+    await commit(items, 'Exchange two treats', 'Preview change', 'Replace 2 × Apple with 2 × Fish treat.');
+    await expect(page.getByText('Apple × 1, Fish treat × 2', {exact: true})).toBeVisible();
     await petForm.locator('select[name=operation]').selectOption('xp');
     await petForm.getByLabel('Pet species').selectOption('dragon');
     await petForm.getByRole('spinbutton', {name: 'Pet XP'}).fill('240');
@@ -108,6 +114,29 @@ test('owner dashboard protects data and applies reviewed gifts and adjustments o
     await petForm.locator('select[name=replacement]').selectOption('icedragon');
     await commit(petForm, 'Correct selected species', 'Preview change', 'Replace Fire Dragon with Ice Dragon. Transfer 240 XP');
     await expect(page.getByRole('listitem').filter({hasText: /Ice Dragon.*240 XP.*Equipped/s})).toBeVisible();
+    expect(await checkBalance()).toBe(450);
+
+    await items.locator('select[name=category]').selectOption('accessories');
+    await items.locator('select[name=item]').selectOption('cap');
+    await commit(items, 'Grant a starter accessory');
+    const childSave = await (await child.request.get('/api/me')).json();
+    childSave.data.profiles.ari.collection.pets[0].accessories.head = 'cap';
+    const wear = await post(child, 'save', {
+      data: childSave.data, revision: childSave.revision, requestId: 'equip-test-cap-' + Date.now()
+    });
+    expect(wear.ok(), await wear.text()).toBe(true);
+    await page.reload();
+    await unlock();
+    await lookup(learner.username).tap();
+    await page.getByRole('button', {name: /Pets & Items/}).tap();
+    await items.locator('select[name=operation]').selectOption('replace');
+    await items.locator('select[name=category]').selectOption('accessories');
+    await items.locator('select[name=item]').selectOption('cap');
+    await items.locator('select[name=replacement]').selectOption('crown');
+    await commit(items, 'Exchange accessory', 'Preview change', 'The old accessory will be unequipped from Ice Dragon');
+    const replaced = (await (await child.request.get('/api/me')).json()).data.profiles.ari.collection;
+    expect(replaced.accessories).toEqual(['crown']);
+    expect(replaced.pets[0].accessories.head).toBeUndefined();
     expect(await checkBalance()).toBe(450);
 
     await page.getByRole('button', {name: /Worlds & Levels/}).tap();

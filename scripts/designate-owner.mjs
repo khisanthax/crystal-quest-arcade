@@ -10,7 +10,7 @@ if (!username || !Number.isInteger(port) || port < 1 || port > 65535) {
 
 try {
   const origin = 'http://127.0.0.1:' + port;
-  const key = process.env.CQ_ADMIN_KEY ?? (await readFile('.local/maintenance-key', 'utf8')).trim();
+  const key = process.env.CQ_ADMIN_KEY || (await readFile('.local/maintenance-key', 'utf8')).trim();
   const response = await fetch(origin + '/api/admin', {
     method: 'POST',
     headers: {'Content-Type': 'application/json', Origin: origin, 'x-cq-admin-key': key},

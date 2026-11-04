@@ -1,7 +1,7 @@
 import {ACCESSORIES, FOOD, PETS, collection, petLevel} from '../dist/runner/collection.js';
 import {progressReport} from './game-master-reports.js';
 import {badgeStampSql,fullAccountChange,snapshotAction} from './game-master-snapshots.js';
-import {badgeView,listBadges,playerBadges,saveBadge} from './game-master-badges.js';
+import {badgeAvailableSql,badgeView,listBadges,playerBadges,saveBadge} from './game-master-badges.js';
 import {exportBackup} from '../dist/runner/store.js';
 import {assignLevel, archiveLevel} from '../dist/runner/levels.js';
 import {STAGES} from '../dist/reading/workflow.js';
@@ -103,9 +103,42 @@ async function editPet(p, change, db, target, fail) {
  return {previous,updated:{pet:c.pets.find(pet => pet.id === updatedId) ?? null,equipped:c.equipped}};
 }
 
+function replaceItem(c,source,{category,replacement,quantity},fail) {
+ const destination = catalog[category].find(item => item.id === replacement);
+ if (!destination || destination.id === source.id) fail(400,'Choose a different item in the same catalog category.');
+ const isFood = category === 'food';
+ const units = amount(quantity ?? 1,1,isFood ? 10000 : 1,fail);
+ const available = isFood ? c.food[source.id] || 0 : Number(c.accessories.includes(source.id));
+ const owned = isFood ? c.food[destination.id] || 0 : Number(c.accessories.includes(destination.id));
+ if (available < units) fail(409,'The selected profile does not own that many of the original item.');
+ if (owned+units > (isFood ? 10000 : 1)) fail(409,'The selected profile cannot hold that replacement quantity.');
+
+ const previous = {item:source.id,quantity:available,replacement:destination.id,replacementQuantity:owned};
+ const updated = {...previous,quantity:available-units,replacementQuantity:owned+units};
+ if (isFood) {
+  if (updated.quantity) c.food[source.id] = updated.quantity;
+  else delete c.food[source.id];
+  c.food[destination.id] = updated.replacementQuantity;
+ } else {
+  const changedSlots = c.pets.filter(pet => pet.accessories[source.slot] === source.id);
+  previous.equipped = changedSlots.map(pet=>({pet:pet.id,slot:source.slot,item:source.id}));
+  c.accessories[c.accessories.indexOf(source.id)] = destination.id;
+  updated.equipped = changedSlots.map(pet=>{
+   const fits = destination.slot === source.slot && petLevel(pet.xp) >= destination.level;
+   if (fits) pet.accessories[source.slot] = destination.id;
+   else delete pet.accessories[source.slot];
+   return {pet:pet.id,slot:source.slot,item:fits ? destination.id : null};
+  });
+ }
+ return {previous,updated};
+}
+
 function editItem(p, change, fail) {
  const c = collection(p), {category,item,operation} = change;
- if (!['food','accessories'].includes(category) || !catalog[category].some(x => x.id === item)) fail(400,'Choose an item from the catalog.');
+ if (!['food','accessories'].includes(category)) fail(400,'Choose an item category.');
+ const source = catalog[category].find(x => x.id === item);
+ if (!source) fail(400,'Choose an item from the catalog.');
+ if (operation === 'replace') return replaceItem(c,source,change,fail);
  if (!['grant','remove','set'].includes(operation)) fail(400,'Choose an item action.');
  const old = category === 'food' ? c.food[item] || 0 : Number(c.accessories.includes(item));
  const n = amount(change.quantity ?? 1, operation === 'set' ? 0 : 1, category === 'food' ? 10000 : 1, fail);
@@ -316,15 +349,15 @@ async function savePackage(body,{db,a,env,fail,response,randomToken}) {
  const old = editing ? await db.prepare('SELECT * FROM game_master_packages WHERE id=?').bind(id).first() : null;
  if (editing && (!old || body.version !== old.version)) fail(409,'Reload the package before editing it.');
  const change = rewardContents(body.change,fail);
- const badge = change.badge ? await db.prepare('SELECT id,active,version FROM game_master_badges WHERE id=?').bind(change.badge).first() : null;
- if (change.badge && (!badge || body.active && !badge.active)) fail(400,'Choose an active badge for this package.');
+ const badge = change.badge ? await db.prepare('SELECT id,version,CASE WHEN '+badgeAvailableSql+' THEN 1 ELSE 0 END AS available FROM game_master_badges WHERE id=?').bind(change.badge).first() : null;
+ if (change.badge && (!badge || body.active && !badge.available)) fail(400,'Choose an active badge for this package.');
  const marker = randomToken(), now = Date.now();
  const next = {id,name,active:body.active,change,version:(old?.version ?? 0)+1,updated:now};
  const result = {package:next};
  const guards = [editing ? 'EXISTS (SELECT 1 FROM game_master_packages WHERE id=? AND version=?)' : 'NOT EXISTS (SELECT 1 FROM game_master_packages WHERE id=?)'];
  const args = editing ? [id,old.version] : [id];
  if (badge) {
-  guards.push('EXISTS (SELECT 1 FROM game_master_badges WHERE id=? AND version=?)');
+  guards.push('EXISTS (SELECT 1 FROM game_master_badges WHERE id=? AND version=?'+(body.active ? ' AND '+badgeAvailableSql : '')+')');
   args.push(badge.id,badge.version);
  }
  const applied = await db.batch([
@@ -425,8 +458,8 @@ export async function gameMasterAction(body, {db,a,env,fail,response,checkedData
  if (standaloneBadge || badgeId !== undefined) {
   if (typeof badgeId !== 'string' || !badgeId) fail(400,'Choose an active collectible badge.');
   const version = standaloneBadge ? change.version : body.change.badgeVersion;
-  const row = await db.prepare('SELECT * FROM game_master_badges WHERE id=? AND active=1').bind(badgeId).first();
-  if (!row || row.version !== version) fail(409,'This badge changed or was retired. Reload and preview the reward again.');
+  const row = await db.prepare('SELECT * FROM game_master_badges WHERE id=? AND '+badgeAvailableSql).bind(badgeId).first();
+  if (!row || row.version !== version) fail(409,'This badge changed, expired or was retired. Reload and preview the reward again.');
   selectedBadge = badgeView(row);
  }
  const badgeOnly = !!selectedBadge && (standaloneBadge || !hasInventoryReward(change));
@@ -553,7 +586,7 @@ export async function gameMasterAction(body, {db,a,env,fail,response,checkedData
   snapshots.push(draw.nonce);
  }
  if (selectedBadge) {
-  guards.push('EXISTS (SELECT 1 FROM game_master_badges WHERE id=? AND version=? AND active=1)');
+  guards.push('EXISTS (SELECT 1 FROM game_master_badges WHERE id=? AND version=? AND '+badgeAvailableSql+')');
   snapshots.push(selectedBadge.id,selectedBadge.version);
   for (const {target} of audits) {
    guards.push('NOT EXISTS (SELECT 1 FROM player_badges WHERE account_id=? AND profile=? AND badge_id=?)');

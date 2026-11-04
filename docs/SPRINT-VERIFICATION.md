@@ -6,6 +6,8 @@
 | Public Reading Detective and publishing | Eight browser checks passed with original synthetic material. Tests used form editing, evidence mapping, persistence and access checks. |
 | Game Master | Eight touch-emulated checks passed across Chromium and WebKit, including owner access, gifts, pet replacement, score repair, recovery PNG, badges, verified backup, reset and restore, and the owner progress report. |
 | Runner controls | Twelve touch or keyboard checks passed across Chromium and WebKit for blast, slide, held controls and cancellation. |
+| Expansion runner stages | Ten touch checks passed across five expansion worlds and both engines. Each earned a stage reward through real controls and quizzes, then resumed stage two after reload. |
+| Complete runner courses | Both fantasy identities completed all three runner stages in Chromium and WebKit. |
 | Navigation and original adventures | Thirty-four touch-emulated checks passed across Chromium and WebKit, including both entrances, all three cards, seven destinations, save/resume and the original discovery gates. |
 | Local owner setup | A disposable Explorer changed from forbidden to allowed on the admin page after the local designation command. |
 

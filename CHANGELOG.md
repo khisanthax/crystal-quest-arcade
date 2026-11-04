@@ -1,5 +1,10 @@
 # Changelog
 
+## Sites v29
+
+- Replace owned treats or accessories atomically, with a preview of equipment changes.
+- Add optional occasions and inclusive UTC grant cutoffs to collectible badges. Earned badges remain visible after the cutoff.
+
 ## Sites v28
 
 - Include a collectible badge in a reusable package or one-time gift. A retired, stale or already-owned badge blocks the whole grant.

@@ -1,5 +1,5 @@
 import {esc} from '../runner/parent.js';
-import {badgeIcon,badgeLabel} from '../shared/badges.js';
+import {badgeIcon,badgeLabel,badgeAvailable,badgeAvailabilityLabel} from '../shared/badges.js';
 
 const option=(value,label)=>`<option value="${esc(value)}">${esc(label)}</option>`;
 const reasonField='<label>Reason<input name="reason" required maxlength="180"></label>';
@@ -11,7 +11,7 @@ export async function mountBadges({host,request,players,selected,profile,refresh
  catch(e){if(host.isConnected)host.querySelector('[data-badge-status]').textContent=e.message;return;}
  if(!host.isConnected)return;
  const {badges,icons,rarities}=catalog;
- const active=badges.filter(b=>b.active);
+ const active=badges.filter(badgeAvailable);
  const recipients=players.filter(p=>!p.disabled);
  host.innerHTML=`
   <h3>Collectible badges</h3>
@@ -34,7 +34,7 @@ export async function mountBadges({host,request,players,selected,profile,refresh
   <form class="section-gap" data-badge-edit>
    <h4>Create or edit a badge</h4>
    <label>Saved badge<select name="editBadge">${option('','New badge')}
-    ${badges.map(b=>option(b.id,b.name+(b.active?'':' (retired)'))).join('')}
+    ${badges.map(b=>option(b.id,b.name+(badgeAvailable(b)?'':' ('+badgeAvailabilityLabel(b)+')'))).join('')}
    </select></label>
    <label>Badge name<input name="name" required maxlength="60"></label>
    <label>Description<textarea name="description" required maxlength="300" rows="2"></textarea></label>
@@ -42,8 +42,13 @@ export async function mountBadges({host,request,players,selected,profile,refresh
     <label>Icon<select name="icon">${icons.map(icon=>option(icon,badgeIcon(icon)+' '+badgeLabel(icon))).join('')}</select></label>
     <label>Rarity<select name="rarity">${rarities.map(rarity=>option(rarity,badgeLabel(rarity))).join('')}</select></label>
    </div>
+   <div class="fields">
+    <label>Occasion (optional)<input name="event" maxlength="80" placeholder="Birthday, holiday, or milestone"></label>
+    <label>Last day to award (UTC)<input name="endsOn" type="date"></label>
+   </div>
+   <p>Leave the date empty to keep the badge available until you retire it.</p>
    <p data-badge-preview></p>
-   <label class="check"><input name="active" type="checkbox" checked> Available to award</label>
+   <label class="check"><input name="active" type="checkbox" checked> Enable awards</label>
    ${reasonField}
    <button class="primary">Preview badge changes</button>
   </form>`;
@@ -95,10 +100,17 @@ export async function mountBadges({host,request,players,selected,profile,refresh
   };
  }
 
+ function availability(badge){
+  return {...badge,available:badge.active&&(!badge.endsOn||badge.endsOn>=new Date().toISOString().slice(0,10))};
+ }
+
  const renderPreview=()=>{
   const name=editor.elements.name.value.trim()||'New badge';
+  const badge=availability({active:editor.elements.active.checked,endsOn:editor.elements.endsOn.value});
+  const occasion=editor.elements.event.value.trim();
   host.querySelector('[data-badge-preview]').textContent=
-   badgeIcon(editor.elements.icon.value)+' '+name+' · '+badgeLabel(editor.elements.rarity.value);
+   badgeIcon(editor.elements.icon.value)+' '+name+' · '+badgeLabel(editor.elements.rarity.value)+
+   (occasion?' · '+occasion:'')+' · '+badgeAvailabilityLabel(badge);
  };
  editor.addEventListener('input',renderPreview);
  editor.elements.editBadge.addEventListener('change',()=>{
@@ -107,7 +119,7 @@ export async function mountBadges({host,request,players,selected,profile,refresh
   editor.reset();
   editor.elements.editBadge.value=id;
   if(saved){
-   for(const field of ['name','description','icon','rarity'])editor.elements[field].value=saved[field];
+   for(const field of ['name','description','icon','rarity','event','endsOn'])editor.elements[field].value=saved[field]??'';
    editor.elements.active.checked=saved.active;
   }
   renderPreview();
@@ -120,12 +132,14 @@ export async function mountBadges({host,request,players,selected,profile,refresh
   const badge={
    name:String(values.get('name')).trim(),description:String(values.get('description')).trim(),
    rarity:String(values.get('rarity')),icon:String(values.get('icon')),active:values.has('active'),
+   event:String(values.get('event')).trim()||null,endsOn:String(values.get('endsOn'))||null,
   };
   if(!badge.name||!badge.description){message('Enter a badge name and description.',true);return;}
   if(saved){badge.id=saved.id;badge.version=saved.version;}
   const verb=saved?'Update':'Create';
-  const status=badge.active?'available to award':'retired';
-  preview(editor,`${verb} ${badgeIcon(badge.icon)} ${badge.name} (${badgeLabel(badge.rarity)}, ${status}).`,'badge-save',badge);
+  const status=badgeAvailabilityLabel(availability(badge));
+  const occasion=badge.event?' for '+badge.event:'';
+  preview(editor,`${verb} ${badgeIcon(badge.icon)} ${badge.name}${occasion} (${badgeLabel(badge.rarity)}, ${status}).`,'badge-save',badge);
  });
  grant?.addEventListener('submit',event=>{
   event.preventDefault();
@@ -135,7 +149,8 @@ export async function mountBadges({host,request,players,selected,profile,refresh
   const chosen=recipients.filter(p=>values.getAll('badgeRecipients').includes(p.id));
   if(!badge||!chosen.length||!identities[identity]){message('Choose a badge, identity, and at least one explorer.',true);return;}
   const targets=chosen.map(p=>({account:p.id,revision:p.revision,profile:identity}));
-  const description=`Award ${badgeIcon(badge.icon)} ${badge.name} to ${chosen.map(p=>p.username).join(', ')} · ${identities[identity]}.`;
+  const occasion=badge.event?' for '+badge.event:'';
+  const description=`Award ${badgeIcon(badge.icon)} ${badge.name}${occasion} to ${chosen.map(p=>p.username).join(', ')} · ${identities[identity]}.`;
   preview(grant,description,'mutate',{targets,change:{type:'badge',id:badge.id,version:badge.version}});
  });
 }

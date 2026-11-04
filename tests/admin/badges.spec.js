@@ -19,6 +19,7 @@ test('owner grants standalone and mixed badges, rejects duplicate grants, and re
  };
  const badgeName='Library Pathfinder '+suffix;
  const badgeDescription='A collectible for a curious reading explorer.';
+ const occasion='Library Reading Week';
  const editor=page.locator('[data-badge-edit]');
  const grant=page.locator('[data-badge-grant]');
  const commit=async(form,button,reason,status)=>{
@@ -46,7 +47,10 @@ test('owner grants standalone and mixed badges, rejects duplicate grants, and re
   await editor.getByLabel('Description').fill(badgeDescription);
   await editor.getByLabel('Icon').selectOption('trophy');
   await editor.getByLabel('Rarity').selectOption('RARE');
+  await editor.getByLabel('Occasion (optional)').fill(occasion);
+  await editor.getByLabel('Last day to award (UTC)').fill('2099-12-31');
   await expect(editor.locator('[data-badge-preview]')).toContainText('🏆 '+badgeName+' · Rare');
+  await expect(editor.locator('[data-badge-preview]')).toContainText(occasion+' · available through 2099-12-31 UTC');
   await commit(editor,'Preview badge changes','Create a demo collectible','Collectible badge saved.');
   await grant.getByLabel('Collectible badge').selectOption({label:'🏆 '+badgeName});
   await expect(grant.getByLabel(recipient.username)).toBeChecked();
@@ -61,6 +65,7 @@ test('owner grants standalone and mixed badges, rejects duplicate grants, and re
   const shelf=child.locator('#collectible-badges');
   await expect(shelf.getByText(badgeName)).toBeVisible();
   await expect(shelf.getByText(badgeDescription)).toBeVisible();
+  await expect(shelf.getByText(occasion,{exact:true})).toBeVisible();
   await expect(shelf.getByText('Rare',{exact:true})).toBeVisible();
 
  const mixedPackage=page.locator('form[data-change="package-save"]');
@@ -124,10 +129,18 @@ test('owner grants standalone and mixed badges, rejects duplicate grants, and re
  expect((await badgeList('luminara')).map(b=>b.name)).toContain(badgeName);
 
   await editor.getByLabel('Saved badge').selectOption({label:badgeName});
-  await editor.getByLabel('Available to award').uncheck();
+  await expect(editor.getByLabel('Occasion (optional)')).toHaveValue(occasion);
+  await editor.getByLabel('Last day to award (UTC)').fill('2001-01-01');
+  await expect(editor.locator('[data-badge-preview]')).toContainText('award window ended');
+  await commit(editor,'Preview badge changes','Close the award window','Collectible badge saved.');
+  await expect(grant).toHaveCount(0);
+  await expect(gift.locator('select[name=badge] option').filter({hasText:badgeName})).toHaveCount(0);
+  await editor.getByLabel('Saved badge').selectOption({label:badgeName+' (award window ended)'});
+  await expect(editor.getByLabel('Enable awards')).toBeChecked();
+  await editor.getByLabel('Enable awards').uncheck();
   await commit(editor,'Preview badge changes','Retire the demo collectible','Collectible badge saved.');
   await expect(grant).toHaveCount(0);
-  await expect(page.getByText('Packages with retired badges need editing before they can be awarded.')).toBeVisible();
+  await expect(page.getByText('Packages with unavailable badges need editing before they can be awarded.')).toBeVisible();
   await expect(packageGrant.locator('option').filter({hasText:packageName})).toHaveCount(0);
 
   await child.reload();
@@ -135,6 +148,7 @@ test('owner grants standalone and mixed badges, rejects duplicate grants, and re
   await child.locator('#choose-ari').tap();
   await child.getByRole('button',{name:'Rewards',exact:false}).tap();
   await expect(shelf.getByText(badgeName)).toHaveCount(1);
+  await expect(shelf.getByText(occasion,{exact:true})).toBeVisible();
   await child.locator('#menu').tap();
   await child.locator('#home').tap();
   await child.locator('#choose-kal').tap();

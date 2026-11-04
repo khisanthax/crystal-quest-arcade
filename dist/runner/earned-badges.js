@@ -19,6 +19,7 @@ export async function showCollectibleBadges(host, profile){
    <strong>${esc(badge.name)}</strong>
    <small>${esc(badgeLabel(badge.rarity))}</small>
    <p>${esc(badge.description)}</p>
+   ${badge.event?`<small>${esc(badge.event)}</small>`: ''}
   </article>`).join('')}</div>`;
  }catch{
   if(!host.isConnected)return;

@@ -1,5 +1,6 @@
 import {mountBadges} from './badges.js';
-import {badgeIcon} from '/shared/badges.js';
+import {badgeIcon,badgeAvailable,badgeAvailabilityLabel} from '/shared/badges.js';
+import {petLevel} from '/runner/collection.js';
 import {createRecoveryPassport} from '/cloud/client.bundle.js?v=passport-1';
 import {esc} from '/runner/parent.js';
 import {WORLDS} from '/runner/worlds.js';
@@ -174,9 +175,10 @@ function petPanel() {
       <div id="xp-field" hidden>${field('Pet XP', 'xp', 'type="number" min="0" max="6000" step="1" disabled')}</div>`)}
     <h3 class="section-gap">Manage an item</h3>
     ${actionForm('item', `<div class="fields">${select('Item action', 'operation',
-      [['grant', 'Grant item'], ['remove', 'Remove item'], ['set', 'Set quantity']])}
+      [['grant', 'Grant item'], ['remove', 'Remove item'], ['set', 'Set quantity'], ['replace', 'Replace item']])}
       ${select('Category', 'category', [['food', 'Food & treats'], ['accessories', 'Accessories']])}
       ${select('Item', 'item', catalogRows('food'))}
+      <div id="item-replacement" hidden>${select('Replacement item', 'replacement', [])}</div>
       ${field('Quantity', 'quantity', 'type="number" min="0" step="1" value="1" required')}</div>`)}
     <h3 class="section-gap">Current inventory</h3>
     <p>${esc(Object.entries(collection?.food || {}).filter(([, qty]) => qty > 0)
@@ -184,11 +186,12 @@ function petPanel() {
     <p>${esc((collection?.accessories || []).map(id =>
       state.catalog.accessories?.find(a => a.id === id)?.name || id).join(', ') || 'No accessories')}</p>`);
   updatePetFields($('work').querySelector('form[data-change="pet"]'));
+  updateItemFields($('work').querySelector('form[data-change="item"]'));
 }
 
 function badgeChoices(includeRetired) {
-  return [['', 'None'], ...state.rewardBadges.filter(badge => badge.active || badge.id === includeRetired)
-    .map(badge => [badge.id, badgeIcon(badge.icon) + ' ' + badge.name + (badge.active ? '' : ' (retired)')])];
+  return [['', 'None'], ...state.rewardBadges.filter(badge => badgeAvailable(badge) || badge.id === includeRetired)
+    .map(badge => [badge.id, badgeIcon(badge.icon) + ' ' + badge.name + (badgeAvailable(badge) ? '' : ' (' + badgeAvailabilityLabel(badge) + ')')])];
 }
 
 function rewardItems() {
@@ -210,7 +213,7 @@ async function rewardPanel(token) {
   state.rewardBadges = result.badges || [];
   const recipients = state.players.filter(p => !p.disabled);
   const enabled = state.packages.filter(p => p.active);
-  const active = enabled.filter(p => !p.change.badge || state.rewardBadges.some(badge => badge.id === p.change.badge && badge.active));
+  const active = enabled.filter(p => !p.change.badge || state.rewardBadges.some(badge => badge.id === p.change.badge && badgeAvailable(badge)));
   const recipientFields = random => `<fieldset><legend>Recipients</legend>
       ${recipients.map(p => `<label class="check"><input name="recipients" type="checkbox" value="${esc(p.id)}"
         ${p.id === state.selected ? 'checked' : ''}> ${esc(p.username)}</label>`).join('')}
@@ -221,7 +224,7 @@ async function rewardPanel(token) {
     ${actionForm('reward', recipientFields(true) + rewardItems(), 'Preview gift')}
     ${active.length ? '<h3 class="section-gap">Award a saved package</h3>' +
       actionForm('reward-package', recipientFields(false) + select('Package', 'id', active.map(p => [p.id, p.name])), 'Preview package grant') : ''}
-    ${active.length !== enabled.length ? '<p>Packages with retired badges need editing before they can be awarded.</p>' : ''}
+    ${active.length !== enabled.length ? '<p>Packages with unavailable badges need editing before they can be awarded.</p>' : ''}
     <h3 class="section-gap">Create or edit a reward package</h3>
     <div class="fields">${select('Saved package', 'edit-package', [['', 'New package'],
       ...state.packages.map(p => [p.id, p.name + (p.active ? '' : ' (inactive)')])])}
@@ -435,7 +438,7 @@ const auditLabels = {
   'wallet:set': 'Balance set', 'wallet:reverse': 'Crystal adjustment reversed',
   'pet:grant': 'Pet granted', 'pet:revoke': 'Pet revoked', 'pet:restore': 'Pet restored',
   'pet:xp': 'Pet XP changed', 'pet:replace': 'Pet replaced', 'item:grant': 'Item granted', 'item:remove': 'Item removed',
-  'item:set': 'Item quantity set', reward: 'Gifts awarded', 'run-reset': 'Course save cleared',
+  'item:set': 'Item quantity set', 'item:replace': 'Item replaced', reward: 'Gifts awarded', 'run-reset': 'Course save cleared',
   'stage-status': 'Stage completion changed', 'high-score-reset': 'Score reset', 'mission-reset': 'Reading mission reopened',
   'study-pack:assign': 'Study pack assigned', 'study-pack:archive': 'Study pack archived',
   restore: 'Profile progress restored', 'snapshot:create': 'Verified backup created',
@@ -453,8 +456,13 @@ function auditDetail(entry) {
     changes.push(names.join(' → ') + ' · ' + after.pet.xp + ' XP');
   } else if (after.pet) changes.push(after.pet.name + ' · ' + after.pet.xp + ' XP');
   if (before.pet && after.pet === null) changes.push(before.pet.name + ' removed');
-  if (after.item) changes.push((state.catalog.food.find(p => p.id === after.item) ||
-    state.catalog.accessories.find(p => p.id === after.item))?.name + ' · ' + before.quantity + ' → ' + after.quantity);
+  if (after.item) {
+    const itemName = id => (state.catalog.food.find(p => p.id === id) ||
+      state.catalog.accessories.find(p => p.id === id))?.name || id;
+    if (entry.action === 'item:replace') changes.push(itemName(after.item) + ' → ' +
+      itemName(after.replacement) + ' · ' + (before.quantity - after.quantity) + ' moved');
+    else changes.push(itemName(after.item) + ' · ' + before.quantity + ' → ' + after.quantity);
+  }
   if (after.username) changes.push(after.username);
   if (entry.action === 'high-score-reset') {
     const beforeScore = before.score ?? before.bestScore;
@@ -583,6 +591,7 @@ function changeText(change, recipients, form) {
     case 'item': {
       const item = state.catalog[change.category]?.find(p => p.id === change.item);
       if (!item) throw Error('Choose an inventory item.');
+      if (change.operation === 'replace') return itemReplacementPreview(change, item);
       return `Item change: ${change.operation} ${item.name} (quantity ${change.quantity}).`;
     }
     case 'high-score-reset': {
@@ -623,7 +632,8 @@ function rewardText(change) {
   const badge = state.rewardBadges.find(p => p.id === change.badge);
   const gifts = [change.crystals > 0 && '◆ ' + change.crystals, pet?.species,
     food && food.name + ' × ' + change.foodQuantity, accessory?.name,
-    badge && badge.name + ' collectible badge' + (badge.active ? '' : ' (retired)')].filter(Boolean);
+    badge && badge.name + ' collectible badge' + (badge.event ? ' for ' + badge.event : '') +
+      (badgeAvailable(badge) ? '' : ' (' + badgeAvailabilityLabel(badge) + ')')].filter(Boolean);
   if (!gifts.length) throw Error('Choose at least one gift.');
   return gifts.join(', ');
 }
@@ -643,8 +653,56 @@ function updatePetFields(form) {
   $('replacement-field').hidden = !replacement;
 }
 
+function itemQuantity(inventory, category, id) {
+  return category === 'food' ? inventory?.food?.[id] || 0 : Number(!!inventory?.accessories?.includes(id));
+}
+
+function updateItemFields(form) {
+  const {category, operation, replacement, quantity} = form.elements;
+  const item = form.elements.namedItem('item');
+  const inventory = profileData()?.collection;
+  const replacing = operation.value === 'replace';
+  const food = category.value === 'food';
+  const owned = id => itemQuantity(inventory, category.value, id);
+  const rows = catalogRows(category.value);
+  const current = item.value;
+  item.innerHTML = options(replacing ? rows.filter(([id]) => !id || owned(id))
+    .map(([id, label]) => [id, id && food ? label + ' × ' + owned(id) : label]) : rows, current);
+  const next = replacement.value;
+  replacement.innerHTML = options(rows.filter(([id]) => id !== item.value || !id)
+    .filter(([id]) => !id || food || !owned(id)), next);
+  replacement.disabled = !replacing;
+  replacement.required = replacing;
+  $('item-replacement').hidden = !replacing;
+  quantity.readOnly = replacing && !food;
+  quantity.min = replacing ? '1' : '0';
+  quantity.max = replacing && item.value ? String(owned(item.value)) : '';
+  if (replacing && (!food || Number(quantity.value) < 1 || Number(quantity.value) > owned(item.value))) {
+    quantity.value = '1';
+  }
+}
+
+function itemReplacementPreview(change, item) {
+  const inventory = profileData()?.collection;
+  const replacement = state.catalog[change.category].find(candidate => candidate.id === change.replacement);
+  if (!replacement || replacement.id === item.id) throw Error('Choose a different replacement item.');
+  const owned = itemQuantity(inventory, change.category, item.id);
+  if (change.quantity < 1 || change.quantity > owned) throw Error('Choose a quantity you own.');
+  if (change.category === 'food') {
+    return 'Replace ' + change.quantity + ' × ' + item.name + ' with ' + change.quantity + ' × ' + replacement.name + '.';
+  }
+  const wearing = (inventory?.pets || []).filter(pet => Object.values(pet.accessories || {}).includes(item.id));
+  const unequipped = wearing.filter(pet => replacement.slot !== item.slot || petLevel(pet.xp) < replacement.level);
+  const count = wearing.length - unequipped.length;
+  let description = 'Replace ' + item.name + ' with ' + replacement.name + '.';
+  if (count) description += ' The replacement stays equipped on ' + count + ' ' + (count === 1 ? 'pet.' : 'pets.');
+  if (unequipped.length) description += ' The old accessory will be unequipped from ' +
+    unequipped.map(pet => pet.name).join(', ') + ' because the replacement uses a different slot or needs a higher pet level.';
+  return description;
+}
+
 function requireActiveBadge(id) {
-  const badge = state.rewardBadges.find(item => item.id === id && item.active);
+  const badge = state.rewardBadges.find(item => item.id === id && badgeAvailable(item));
   if (!badge) throw Error('Choose an available badge before continuing.');
   return badge;
 }
@@ -987,9 +1045,7 @@ $('work').addEventListener('change', async event => {
     form.elements.xp.required = showXP;
     updatePetFields(form);
   }
-  if (form?.dataset.change === 'item' && input.name === 'category') {
-    form.elements.item.innerHTML = options(catalogRows(input.value));
-  }
+  if (form?.dataset.change === 'item' && ['operation', 'category', 'item'].includes(input.name)) updateItemFields(form);
 });
 
 $('work').addEventListener('submit', event => {
