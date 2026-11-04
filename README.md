@@ -35,3 +35,5 @@ Guest progress lives in the browser. Explorer accounts use enrolled devices, rem
 ## Deployment
 
 `npm run build` builds static assets, a service worker and the cloud Worker. Static HTTPS hosting supports device-local play. For accounts and cloud saves, use the Worker entry in `dist/server/index.js` with D1, apply the checked-in migrations, and configure the deployment secrets outside the repository. The [release runbook](docs/RELEASE.md) covers backup and rollback.
+
+See [Game Master Dashboard](docs/GAME-MASTER.md) for owner setup and tested administration workflows.

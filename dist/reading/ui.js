@@ -18,7 +18,7 @@ function reward(key,n,xp=0){const {p}=context(),paid=readingReward(p,h,pack,s,ke
 function stage(value){setStage(s,pack,value);anchor=null;render();}
 const readingStages=new Set([STAGES.CLUES,STAGES.SELECT,STAGES.EVIDENCE_FEEDBACK,STAGES.READY]);
 function primary(label,disabled=false){return `<button id="guided-primary" data-primary class="reading-action gold" ${disabled?'disabled':''}>${label}</button>`;}
-function quotedEvidence(q){return evidenceSegments(s,q.id).map(e=>`<blockquote class="verified">${esc(pack.paragraphs.find(a=>a.id===e.paragraphId)?.text.slice(e.start,e.end)||'')}</blockquote>`).join('');}
+function quotedEvidence(q){const spans=s.evidence[q.id]?.segments||evidenceSegments(s,q.id);return spans.map(e=>`<blockquote class="verified">${esc(pack.paragraphs.find(a=>a.id===e.paragraphId)?.text.slice(e.start,e.end)||'')}</blockquote>`).join('');}
 function advanceMission(){if(pack.questions.every(q=>s.written[q.id])){if(!s.completed){s.completed=new Date().toISOString();reward('complete',5,15);}stage(STAGES.CASE_COMPLETE);return;}if(!nextMission(s,pack))switchMission(s,pack,pack.questions.findIndex(q=>!s.written[q.id]));render();}
 function openOverview(target){if(![STAGES.MAP,STAGES.NOTEBOOK].includes(s.workflowStage))s.overviewReturn=s.workflowStage;stage(target);}
 function goBack(){const st=s.workflowStage;if(st===STAGES.MAP||st===STAGES.NOTEBOOK){stage(s.overviewReturn||STAGES.CLUES);return;}if(st===STAGES.MAIN_IDEA){returnToParagraph();return;}if(st===STAGES.PAPER){stage(s.paperReturn||STAGES.READY);return;}if(st===STAGES.CONNECTION){stage(STAGES.READY);return;}if(st===STAGES.SELECT||st===STAGES.EVIDENCE_FEEDBACK||st===STAGES.READY){stage(STAGES.CLUES);return;}library();}
@@ -73,16 +73,68 @@ async function validateKeywords(){
 function illustration(a){const v=typeof a.illustration==='string'?a.illustration:a.illustration?.kind;if(!['forest','garden','space','ocean'].includes(v))return '';return `<svg class="reading-illustration" viewBox="0 0 180 110" role="img" aria-label="${esc(a.illustration?.alt||v+' illustration')}"><rect width="180" height="110" rx="13" fill="${v==='space'?'#25344f':v==='ocean'?'#83c9d7':'#b2d6ba'}"/>${v==='forest'||v==='garden'?'<path d="M0 100q90-45 180 0v10H0" fill="#608e61"/><path d="M32 95V40m72 50V30m44 70V46" stroke="#8c6747" stroke-width="9"/><g fill="#4c9b6b"><circle cx="32" cy="32" r="25"/><circle cx="104" cy="25" r="28"/><circle cx="148" cy="40" r="23"/></g>':v==='space'?'<g fill="#ffe9a1"><circle cx="23" cy="20" r="2"/><circle cx="146" cy="70" r="3"/><circle cx="60" cy="89" r="2"/></g><circle cx="100" cy="45" r="28" fill="#b0a1da"/><ellipse cx="100" cy="45" rx="46" ry="9" fill="none" stroke="#e6c997" stroke-width="6"/>':'<path d="M20 110V70m0 15-10-10m10 17 15-18m115 36V60m0 20-13-14m13 27 18-13" stroke="#e6a7ab" fill="none" stroke-width="9"/><g fill="#f9d18d"><ellipse cx="75" cy="40" rx="22" ry="11"/><path d="M53 40l-13-13v26z"/></g><circle cx="84" cy="38" r="2" fill="#314c58"/>'}</svg>`;}
 
 function passagePanel(q,a){if(s.workflowStage===STAGES.READY&&current().reviewSaved)return `<h3>Your verified clues</h3>${quotedEvidence(q)}<h2>Did you find your answer?</h2>`;if(!s.visited.includes(a.id))s.visited.push(a.id);const m=current(),selecting=[STAGES.SELECT,STAGES.EVIDENCE_FEEDBACK].includes(s.workflowStage)&&!(s.workflowStage===STAGES.EVIDENCE_FEEDBACK&&m.verdict),ss=sentences(a.text),spans=evidenceSegments(s,q.id);
- return `<div class="passage-heading"><p class="case-eyebrow">Paragraph ${s.paragraph+1} of ${pack.paragraphs.length}</p></div><h2 class="reading-instruction">${s.workflowStage===STAGES.READY?'Did you find your answer?':selecting?'Highlight the sentence that helps answer your question.':'Clue Mode'}</h2>${s.workflowStage===STAGES.CLUES?'<p class="reading-instruction">Tap words that might help answer your question.</p>':''}<nav class="story-buttons" aria-label="Paragraph navigation"><button id="previous-paragraph" ${s.paragraph?'':'disabled'}>⬅ Previous Paragraph</button><button id="next-paragraph">${s.paragraph===pack.paragraphs.length-1?'📖 Review Story':'Next Paragraph ➜'}</button><button id="full-source">📖 Whole Story</button><button id="open-notebook">📓 Look at My Clues</button></nav>${illustration(a)}<div id="passage-scroll" class="passage-scroll ${selecting?'select-evidence':''}" aria-label="Reading passage">${ss.map((sentence,i)=>{const pending=!m.selectionChecked&&m.selection?.paragraphId===a.id&&m.selection.start<sentence.end&&m.selection.end>sentence.start,green=!pending&&spans.some(e=>e.paragraphId===a.id&&e.start<=sentence.start&&e.end>=sentence.end);return `<span data-sentence="${i}" tabindex="0" role="button" class="passage-sentence ${pending&&!m.shortSpan?'pending':''} ${green?'verified current-verified':''}">${spanWords(a,sentence,selecting,m)}</span> `;}).join('')}</div><p id="evidence-feedback" role="status">${esc(m.feedback||'')}</p><nav class="guided-secondary"><button id="reading-hint">💡 Help</button>${s.evidence[q.id]&&s.workflowStage!==STAGES.READY?'<button id="review-evidence">Review saved clues</button>':''}${selecting?`<button id="clear-evidence">Clear selection</button><button id="span-mode" aria-pressed="${!!m.shortSpan}">${m.shortSpan?'Use whole sentences':'Select a short span'}</button>`:''}</nav>`;
+ return `<div class="passage-heading"><p class="case-eyebrow">Paragraph ${s.paragraph+1} of ${pack.paragraphs.length}</p></div><h2 class="reading-instruction">${s.workflowStage===STAGES.READY?'Did you find your answer?':selecting?'Highlight the sentence that helps answer your question.':'Clue Mode'}</h2>${s.workflowStage===STAGES.CLUES?'<p class="reading-instruction">Tap words that might help answer your question.</p>':''}<nav class="story-buttons" aria-label="Paragraph navigation"><button id="previous-paragraph" ${s.paragraph?'':'disabled'}>⬅ Previous Paragraph</button><button id="next-paragraph">${s.paragraph===pack.paragraphs.length-1?'📖 Review Story':'Next Paragraph ➜'}</button><button id="full-source">📖 Whole Story</button><button id="open-notebook">📓 Look at My Clues</button></nav>${illustration(a)}<div id="passage-scroll" class="passage-scroll ${selecting?'select-evidence':''}" aria-label="Reading passage">${ss.map((sentence,i)=>{const pending=!m.selectionChecked&&m.selection?.paragraphId===a.id&&m.selection.start<sentence.end&&m.selection.end>sentence.start,green=!pending&&spans.some(e=>e.paragraphId===a.id&&e.start<=sentence.start&&e.end>=sentence.end);return `<span data-sentence="${i}" ${selecting&&!m.shortSpan?`tabindex="0" role="button" aria-pressed="${pending}"`: ''} class="passage-sentence ${pending&&!m.shortSpan?'pending':''} ${green?'verified current-verified':''}">${spanWords(a,sentence,selecting,m)}</span> `;}).join('')}</div><p id="evidence-feedback" role="status">${esc(m.feedback||'')}</p><nav class="guided-secondary"><button id="reading-hint">💡 Help</button>${s.evidence[q.id]&&s.workflowStage!==STAGES.READY?'<button id="review-evidence">Review saved clues</button>':''}${selecting?`<button id="clear-evidence">Clear selection</button><button id="span-mode" aria-pressed="${!!m.shortSpan}">${m.shortSpan?'Use whole sentences':'Select a short span'}</button>`:''}</nav>`;
 }
 function allClues(id){return [...new Set([...(s.clues[id]||[]),...Object.values(s.missions).flatMap(m=>m.clues?.[id]||[])])];}
 function visibleClues(m,id){return allClues(id).filter(n=>!(m.hiddenClues?.[id]||[]).includes(n));}
-function spanWords(a,sentence,selecting,m){let cursor=0;return words(sentence.text).map(w=>{const start=sentence.start+w.start,end=sentence.start+w.end,before=sentence.text.slice(cursor,w.start);cursor=w.end;const pending=m.shortSpan&&!m.selectionChecked&&m.selection?.paragraphId===a.id&&m.selection.start<=start&&m.selection.end>=end,green=evidenceSegments(s,qNow().id).some(e=>e.paragraphId===a.id&&e.start<=start&&e.end>=end);return esc(before)+(selecting?`<span data-evidence-word data-start="${start}" data-end="${end}" class="${pending?'pending':green?'verified':''}">${esc(w.text)}</span>`:`<button class="clue-word ${visibleClues(m,a.id).includes(start)?'clued':''} ${green?'verified':''}" data-clue="${start}">${esc(w.text)}</button>`);}).join('')+esc(sentence.text.slice(cursor));}
-function bindPassage(q,a){const m=current();document.querySelectorAll('[data-clue]').forEach(b=>b.onclick=()=>{const n=Number(b.dataset.clue),list=m.clues[a.id]??=[],visible=visibleClues(m,a.id).includes(n);m.hiddenClues??={};const hidden=m.hiddenClues[a.id]??=[];if(visible){m.clues[a.id]=list.filter(x=>x!==n);s.clues[a.id]=(s.clues[a.id]||[]).filter(x=>x!==n);m.hiddenClues[a.id]=[...hidden,n];}else{m.clues[a.id]=[...list,n];m.hiddenClues[a.id]=hidden.filter(x=>x!==n);}b.classList.toggle('clued',!visible);save();});
+function spanWords(a,sentence,selecting,m){let cursor=0;return words(sentence.text).map(w=>{const start=sentence.start+w.start,end=sentence.start+w.end,before=sentence.text.slice(cursor,w.start);cursor=w.end;const pending=!m.selectionChecked&&m.selection?.paragraphId===a.id&&m.selection.start<=start&&m.selection.end>=end,green=evidenceSegments(s,qNow().id).some(e=>e.paragraphId===a.id&&e.start<=start&&e.end>=end);return esc(before)+(selecting?`<span data-evidence-word data-start="${start}" data-end="${end}" ${m.shortSpan?`tabindex="0" role="button" aria-pressed="${pending}"`: ''} class="${pending?(m.shortSpan?'pending':''):green?'verified':''}">${esc(w.text)}</span>`:`<button class="clue-word ${visibleClues(m,a.id).includes(start)?'clued':''} ${green?'verified':''}" data-clue="${start}" aria-pressed="${visibleClues(m,a.id).includes(start)}">${esc(w.text)}</button>`);}).join('')+esc(sentence.text.slice(cursor));}
+function bindPassage(q,a){const m=current();document.querySelectorAll('[data-clue]').forEach(b=>b.onclick=()=>{const n=Number(b.dataset.clue),list=m.clues[a.id]??=[],visible=visibleClues(m,a.id).includes(n);m.hiddenClues??={};const hidden=m.hiddenClues[a.id]??=[];if(visible){m.clues[a.id]=list.filter(x=>x!==n);s.clues[a.id]=(s.clues[a.id]||[]).filter(x=>x!==n);m.hiddenClues[a.id]=[...hidden,n];}else{m.clues[a.id]=[...list,n];m.hiddenClues[a.id]=hidden.filter(x=>x!==n);}b.classList.toggle('clued',!visible);b.setAttribute('aria-pressed',String(!visible));save();});
  on('previous-paragraph',()=>{visitParagraph(s,pack,s.paragraph-1);render();});on('next-paragraph',()=>{s.overviewReturn=STAGES.CLUES;forwardParagraph(s,pack);render();});on('full-source',()=>openOverview(STAGES.MAP));on('open-notebook',()=>openOverview(STAGES.NOTEBOOK));on('reading-hint',hint);on('review-evidence',()=>{m.reviewSaved=true;stage(STAGES.READY);});on('back-saved-reading',()=>{m.reviewSaved=false;stage(STAGES.CLUES);});on('clear-evidence',()=>{m.selection=null;m.selectionChecked=false;anchor=null;stage(STAGES.SELECT);});on('span-mode',()=>{m.shortSpan=!m.shortSpan;m.selection=null;anchor=null;stage(STAGES.SELECT);});
- const region=$('passage-scroll'),ss=sentences(a.text);if(!region?.classList.contains('select-evidence'))return;let dragging=false;
- const pick=target=>{const el=target?.closest(m.shortSpan?'[data-evidence-word]':'[data-sentence]');if(!el||!region.contains(el))return;const key=m.shortSpan?{start:Number(el.dataset.start),end:Number(el.dataset.end)}:ss[Number(el.dataset.sentence)];anchor??=key;const start=Math.min(anchor.start,key.start),end=Math.max(anchor.end,key.end);m.selection={paragraphId:a.id,start,end};m.selectionChecked=false;m.verdict=false;setStage(s,pack,STAGES.SELECT);region.querySelectorAll('[data-sentence]').forEach(e=>{const x=ss[Number(e.dataset.sentence)];e.classList.toggle('pending',!m.shortSpan&&x.start>=start&&x.end<=end);e.classList.remove('verified','current-verified');});region.querySelectorAll('[data-evidence-word]').forEach(e=>{e.classList.toggle('pending',m.shortSpan&&Number(e.dataset.start)>=start&&Number(e.dataset.end)<=end);e.classList.remove('verified');});$('guided-primary').disabled=false;$('guided-primary').textContent='CHECK MY EVIDENCE';save();};
- region.addEventListener('pointerdown',e=>{e.preventDefault();dragging=true;pick(e.target);try{region.setPointerCapture(e.pointerId);}catch{}});region.addEventListener('pointermove',e=>{if(dragging)pick(document.elementFromPoint(e.clientX,e.clientY));});for(const event of ['pointerup','pointercancel','lostpointercapture'])region.addEventListener(event,()=>dragging=false);region.querySelectorAll('[data-sentence]').forEach(e=>e.onkeydown=event=>{if(['Enter',' '].includes(event.key)){event.preventDefault();pick(e);}});
+ const region=$('passage-scroll'),ss=sentences(a.text);if(!region?.classList.contains('select-evidence'))return;let dragging=false,touchStart=null;
+ const saved=evidenceSegments(s,q.id).filter(e=>e.paragraphId===a.id);
+ const pick=target=>{
+  const el=target?.closest(m.shortSpan?'[data-evidence-word]':'[data-sentence]');
+  if(!el||!region.contains(el))return;
+  const key=m.shortSpan?{start:Number(el.dataset.start),end:Number(el.dataset.end)}:ss[Number(el.dataset.sentence)];
+  anchor??=key;
+  const start=Math.min(anchor.start,key.start),end=Math.max(anchor.end,key.end);
+  m.selection={paragraphId:a.id,start,end};
+  m.selectionChecked=false;
+  m.verdict=false;
+  setStage(s,pack,STAGES.SELECT);
+  for(const node of region.querySelectorAll('[data-sentence], [data-evidence-word]')){
+   const sentence=node.hasAttribute('data-sentence');
+   const range=sentence?ss[Number(node.dataset.sentence)]:{start:Number(node.dataset.start),end:Number(node.dataset.end)};
+   const pending=range.start<end&&range.end>start;
+   const green=!pending&&saved.some(e=>e.start<=range.start&&e.end>=range.end);
+   const highlighted=pending&&(sentence?!m.shortSpan:m.shortSpan);
+   node.classList.toggle('pending',highlighted);
+   if(node.hasAttribute('aria-pressed'))node.setAttribute('aria-pressed',String(highlighted));
+   node.classList.toggle('verified',green);
+   if(sentence)node.classList.toggle('current-verified',green);
+  }
+  $('guided-primary').disabled=false;
+  $('guided-primary').textContent='CHECK MY EVIDENCE';
+  save();
+ };
+ region.addEventListener('pointerdown',e=>{
+  if(e.pointerType==='touch'){
+   touchStart={id:e.pointerId,x:e.clientX,y:e.clientY};
+   return;
+  }
+  e.preventDefault();
+  dragging=true;
+  pick(e.target);
+  try{region.setPointerCapture(e.pointerId);}catch{}
+ });
+ region.addEventListener('pointermove',e=>{
+  if(dragging)pick(document.elementFromPoint(e.clientX,e.clientY));
+ });
+ region.addEventListener('pointerup',e=>{
+  dragging=false;
+  if(touchStart?.id!==e.pointerId)return;
+  const {x,y}=touchStart;
+  touchStart=null;
+  if(Math.hypot(e.clientX-x,e.clientY-y)<10)pick(e.target);
+ });
+ for(const event of ['pointercancel','lostpointercapture'])region.addEventListener(event,e=>{
+  dragging=false;
+  if(touchStart?.id===e.pointerId)touchStart=null;
+ });
+ region.querySelectorAll('[role=button]').forEach(e=>e.onkeydown=event=>{
+  if(['Enter',' '].includes(event.key)){event.preventDefault();pick(e);}
+ });
+
 }
 async function gradeRemote(kind,args){const root=document.querySelector('.guided'),selection=current().selection;if(root.dataset.checking)return null;root.dataset.checking='true';try{const r=await readingRequest('check',{id:pack.id,profile:getProfile(),question:qNow().id,kind,...args});return root.isConnected&&(kind!=='evidence'||selection===current().selection)?r:null;}catch(e){if(root.isConnected){current().feedback=e.message;render();}return null;}finally{delete root.dataset.checking;}}
 async function verifyEvidence(){const q=qNow(),m=current();if(!m.selection)return;const selection={...m.selection},was=!!s.evidence[q.id];let r;

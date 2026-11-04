@@ -6,6 +6,7 @@ process.env.CQ_DB_PATH ??= '.local/playwright-' + process.pid + '.sqlite';
 export default defineConfig({
   testDir: './tests',
   testMatch: '**/*.spec.js',
+  testIgnore: '**/admin/**',
   timeout: 420000,
   workers: 1,
   use: {

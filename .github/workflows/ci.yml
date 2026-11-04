@@ -1,5 +1,8 @@
 name: Arcade checks
 on: [push, pull_request]
+concurrency:
+  group: arcade-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
 permissions:
   contents: read
 jobs:
@@ -34,6 +37,8 @@ jobs:
       - run: npm run build
       - run: npx playwright install --with-deps ${{ matrix.engine }}
       - run: npm run test:browser -- --project=${{ matrix.engine }} --shard=${{ matrix.shard }}/2
+      - if: matrix.shard == 1
+        run: npx playwright test --config=playwright.game-master.config.js --project=${{ matrix.engine }}
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
@@ -43,3 +48,13 @@ jobs:
             playwright-report/
           if-no-files-found: ignore
           retention-days: 7
+  release-ready:
+    runs-on: ubuntu-latest
+    needs: [verify, browser]
+    if: always()
+    steps:
+      - name: Require build and browser checks
+        env:
+          BUILD_RESULT: ${{ needs.verify.result }}
+          BROWSER_RESULT: ${{ needs.browser.result }}
+        run: test "$BUILD_RESULT" = success && test "$BROWSER_RESULT" = success

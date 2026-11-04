@@ -23,3 +23,36 @@ test('previously customized worksheet with a built-in case ID keeps its own titl
   const backup=(await h.call('admin',{action:'backup',username:a.account.username},j)).data;assert.equal(backup.data.homeworkPacks[pack.id].paragraphs[0].mainIdea.answer,1);
  }finally{h.DB.close();}
 });
+
+test('the server rejects a second ID for the same homework reward proof',async t=>{
+ const h=harness(),j=h.jar(),a=await h.signup(j),data=a.data;
+ t.after(()=>h.DB.close());
+ await h.call('admin',{action:'designate-reading-admin',username:a.account.username},j);
+ const p=data.profiles.ari,pack=readingFixture();
+ assignHomework(data,'ari',pack);
+ const homework=ensureHomework(data,'ari'),state=caseState(homework,pack);
+ state.evidence.q1={...pack.questions[0].evidence[0],independent:true};
+ const paid=readingReward(p,homework,pack,state,'evidence:q1',10);
+ assert.equal(paid,10);
+ assert.equal((await h.call('save',{requestId:'first-proof',revision:0,data},j)).status,200);
+ const copied={...p.economyEvents[0],id:p.economyEvents[0].id+':again'};
+ p.economyEvents.push(copied);
+ homework.rewardIds.push(copied.id);
+ p.crystals+=paid;
+ p.collection.wallet+=paid;
+ const res=await h.call('save',{requestId:'replayed-proof',revision:1,data},j);
+ assert.equal(res.status,400);
+ assert.match(res.data.error,/matching saved learning event/);
+});
+
+test('new recovery passports expire and pre-migration passports remain usable once',async t=>{
+ const h=harness(),j=h.jar(),a=await h.signup(j);
+ t.after(()=>h.DB.close());
+ const expiry=h.DB.db.prepare('SELECT recovery_expires FROM explorers WHERE id=?').get(a.account.id).recovery_expires;
+ assert.ok(expiry>Date.now());
+ h.DB.db.prepare('UPDATE explorers SET recovery_expires=? WHERE id=?').run(Date.now()-1000,a.account.id);
+ assert.equal((await h.call('recover',{token:a.recovery},h.jar())).status,401);
+ h.DB.db.prepare('UPDATE explorers SET recovery_expires=NULL WHERE id=?').run(a.account.id);
+ assert.equal((await h.call('recover',{token:a.recovery},h.jar())).status,200);
+ assert.equal((await h.call('recover',{token:a.recovery},h.jar())).status,401);
+});

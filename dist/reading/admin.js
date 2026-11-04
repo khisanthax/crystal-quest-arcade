@@ -9,7 +9,11 @@ export async function readingRequest(action,body={}){
 export async function openAdmin({screen,on,back,enter}){
  let access;try{access=await readingRequest('access');}catch{access={};}
  if(access.admin){enter();return;}
- screen('<section class="panel"><h2>Administrator access</h2><p>Sign in to the designated administrator Explorer to manage homework and study packs.</p><button id="admin-back">Back</button></section>','reading-import');
+ if(access.locked){screen('<section class="panel"><h2>Unlock Game Master</h2><p>Enter the owner key in Game Master, then return to the workshop.</p><a href="/admin">Open Game Master</a><button id="admin-back">Back</button></section>','reading-import');on('admin-back',back);return;}
+ const description = access.locked
+   ? '<p>Unlock Game Master to manage homework and study packs.</p><p><a href="/admin">Open Game Master</a></p>'
+   : '<p>Sign in to the designated administrator Explorer to manage homework and study packs.</p>';
+ screen(`<section class="panel"><h2>Administrator access</h2>${description}<button id="admin-back">Back</button></section>`,'reading-import');
  on('admin-back',back);
 }
 export function homeworkAdmin({screen,on,back,getProfile}){
