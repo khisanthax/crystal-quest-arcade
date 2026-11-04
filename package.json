@@ -1,0 +1,26 @@
+{
+  "name": "crystal-quest-arcade",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node server.mjs",
+    "start": "node server.mjs",
+    "build": "node scripts/build-client.mjs && node scripts/build.mjs && node scripts/build-cloud.mjs",
+    "test": "node --test tests/**/*.test.mjs",
+    "test:browser": "playwright test",
+    "check": "node scripts/check.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.56.1"
+  },
+  "dependencies": {
+    "esbuild": "^0.28.2",
+    "jsqr": "^1.4.0",
+    "qrcode": "^1.5.4",
+    "three": "^0.181.1"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}

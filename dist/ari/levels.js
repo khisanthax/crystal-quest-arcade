@@ -1,0 +1,5 @@
+export const LEVELS=[
+ {name:'The Underground Caves',short:'Crystal caves',subtitle:'Find the crystal hammer. Open the ancient passage.',color:'#a78bfa',stations:[{x:1050,name:'Fossil grotto',type:'fossil',terms:['fossil','sediment']},{x:2750,name:'The crystal chest',type:'chest',terms:['sedimentary','metamorphic']},{x:4550,name:'Crystal hammer',type:'hammer',terms:['weathering','erosion']} ]},
+ {name:"Journey to Earth’s Core",short:'Earth’s layers',subtitle:'Explore the layers. Bring the stone bridges to life.',color:'#ffbe70',stations:[{x:1150,name:'Earth layer elevator',type:'layers',terms:['crust','mantle','core']},{x:3000,name:'The shifting bridge',type:'plates',bridge:true,terms:['plate']},{x:4700,name:'Hidden history chamber',type:'dating',terms:['dating']}]},
+ {name:'Volcano Escape!',short:'Volcano escape',subtitle:'Power the cooling bridges. Help the friendly guardian.',color:'#ff987b',stations:[{x:1400,name:'The cooling switch',type:'volcano',bridge:true,terms:['magma','lava']},{x:4300,name:'The Volcano Guardian',type:'boss',terms:[]} ]}
+];

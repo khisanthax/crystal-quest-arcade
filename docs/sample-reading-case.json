@@ -1,0 +1,231 @@
+{
+  "schemaVersion": 1,
+  "id": "fictional-garden-qa",
+  "title": "Developer Sample: Mira’s Garden",
+  "source": "Fictional QA example, not a real worksheet",
+  "paragraphs": [
+    {
+      "id": "p1",
+      "page": 1,
+      "text": "Mira planted a small garden beside the library. She chose beans because they grow quickly. Each morning, she checked the soil.",
+      "mainIdea": {
+        "prompt": "What is this paragraph mostly about?",
+        "choices": [
+          "Starting a garden",
+          "Buying library books",
+          "Flying a kite"
+        ],
+        "answer": 0
+      },
+      "illustration": {
+        "kind": "garden",
+        "alt": "An illustrated garden"
+      }
+    },
+    {
+      "id": "p2",
+      "page": 1,
+      "text": "The soil was dry after three sunny days. Mira watered the roots so the plants could keep growing. A robin watched from the fence.",
+      "mainIdea": {
+        "prompt": "What is this paragraph mostly about?",
+        "choices": [
+          "Caring for dry plants",
+          "Building a fence",
+          "Finding a robin nest"
+        ],
+        "answer": 0
+      }
+    },
+    {
+      "id": "p3",
+      "page": 2,
+      "text": "By Friday, tiny green shoots reached above the soil. Mira shared the news with her neighbor. Next week, they would plant another row together.",
+      "mainIdea": {
+        "prompt": "What is this paragraph mostly about?",
+        "choices": [
+          "The garden is growing",
+          "The library is closed",
+          "A storm broke the fence"
+        ],
+        "answer": 0
+      }
+    }
+  ],
+  "questions": [
+    {
+      "id": "q1",
+      "text": "Why did Mira choose beans?",
+      "keywordGroups": [
+        {
+          "any": [
+            "why"
+          ]
+        },
+        {
+          "any": [
+            "beans",
+            "choose beans"
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "paragraphId": "p1",
+          "start": 48,
+          "end": 90,
+          "explanation": "Your selected sentence gives the detail this mission asks about."
+        }
+      ],
+      "hints": [
+        "Think about the action in your question.",
+        "Compare the ideas you have already read.",
+        "Think about the topic connected to your mission."
+      ],
+      "regionHint": "Look for an idea about the garden and the action in your question.",
+      "rescue": "Ask a grown-up to compare the question and paragraph ideas with you.",
+      "outline": "Say the idea aloud, then write your own sentence."
+    },
+    {
+      "id": "q2",
+      "text": "Where did Mira plant the garden?",
+      "keywordGroups": [
+        {
+          "any": [
+            "where"
+          ]
+        },
+        {
+          "any": [
+            "garden",
+            "plant"
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "paragraphId": "p1",
+          "start": 0,
+          "end": 47,
+          "explanation": "Your selected sentence gives the detail this mission asks about."
+        }
+      ],
+      "hints": [
+        "Think about the action in your question.",
+        "Compare the ideas you have already read.",
+        "Think about the topic connected to your mission."
+      ],
+      "regionHint": "Look for an idea about the garden and the action in your question.",
+      "rescue": "Ask a grown-up to compare the question and paragraph ideas with you.",
+      "outline": "Say the idea aloud, then write your own sentence."
+    },
+    {
+      "id": "q3",
+      "text": "Why did Mira water the roots?",
+      "keywordGroups": [
+        {
+          "any": [
+            "why"
+          ]
+        },
+        {
+          "any": [
+            "water",
+            "roots"
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "paragraphId": "p2",
+          "start": 41,
+          "end": 97,
+          "explanation": "Your selected sentence gives the detail this mission asks about."
+        }
+      ],
+      "hints": [
+        "Think about the action in your question.",
+        "Compare the ideas you have already read.",
+        "Think about the topic connected to your mission."
+      ],
+      "regionHint": "Look for an idea about the garden and the action in your question.",
+      "rescue": "Ask a grown-up to compare the question and paragraph ideas with you.",
+      "outline": "Say the idea aloud, then write your own sentence.",
+      "reflection": {
+        "prompt": "What does this clue tell us?",
+        "choices": [
+          "Water helped the plants keep growing",
+          "The robin watered the library"
+        ],
+        "answer": 0
+      }
+    },
+    {
+      "id": "q4",
+      "text": "What grew above the soil by Friday?",
+      "keywordGroups": [
+        {
+          "any": [
+            "what"
+          ]
+        },
+        {
+          "any": [
+            "grew",
+            "Friday",
+            "soil"
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "paragraphId": "p3",
+          "start": 0,
+          "end": 52,
+          "explanation": "Your selected sentence gives the detail this mission asks about."
+        }
+      ],
+      "hints": [
+        "Think about the action in your question.",
+        "Compare the ideas you have already read.",
+        "Think about the topic connected to your mission."
+      ],
+      "regionHint": "Look for an idea about the garden and the action in your question.",
+      "rescue": "Ask a grown-up to compare the question and paragraph ideas with you.",
+      "outline": "Say the idea aloud, then write your own sentence."
+    },
+    {
+      "id": "q5",
+      "text": "Who would plant another row with Mira?",
+      "keywordGroups": [
+        {
+          "any": [
+            "who"
+          ]
+        },
+        {
+          "any": [
+            "plant",
+            "row",
+            "Mira"
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "paragraphId": "p3",
+          "start": 53,
+          "end": 142,
+          "explanation": "Your selected sentence gives the detail this mission asks about."
+        }
+      ],
+      "hints": [
+        "Think about the action in your question.",
+        "Compare the ideas you have already read.",
+        "Think about the topic connected to your mission."
+      ],
+      "regionHint": "Look for an idea about the garden and the action in your question.",
+      "rescue": "Ask a grown-up to compare the question and paragraph ideas with you.",
+      "outline": "Say the idea aloud, then write your own sentence."
+    }
+  ]
+}

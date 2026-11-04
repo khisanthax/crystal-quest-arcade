@@ -1,0 +1,14 @@
+{
+ "$schema":"https://json-schema.org/draft/2020-12/schema",
+ "title":"Crystal Quest Study Pack v1",
+ "type":"object",
+ "required":["version","id","title","subject","grade","vocabulary","facts","questions"],
+ "properties":{
+  "version":{"const":1},"id":{"$ref":"#/$defs/id"},"title":{"type":"string","minLength":1,"maxLength":160},"subject":{"type":"string","minLength":1,"maxLength":160},"grade":{"type":"string","minLength":1,"maxLength":160},"archived":{"type":"boolean"},
+  "vocabulary":{"type":"array","maxItems":300,"items":{"type":"object","required":["id","term","definition"],"properties":{"id":{"$ref":"#/$defs/id"},"term":{"type":"string","minLength":1,"maxLength":100},"definition":{"$ref":"#/$defs/text"}}}},
+  "facts":{"type":"array","maxItems":300,"items":{"type":"object","required":["id","definition"],"properties":{"id":{"$ref":"#/$defs/id"},"definition":{"$ref":"#/$defs/text"}}}},
+  "questions":{"type":"array","minItems":1,"maxItems":500,"items":{"type":"object","required":["id","concepts","type","prompt","choices","answer"],"properties":{"id":{"$ref":"#/$defs/id"},"concepts":{"type":"array","minItems":1,"uniqueItems":true,"items":{"$ref":"#/$defs/id"}},"type":{"enum":["choice","matching","picture","order"]},"prompt":{"$ref":"#/$defs/text"},"picture":{"type":"string","pattern":"^[\\w-]{1,40}$"},"choices":{"type":"array","minItems":2,"maxItems":4,"items":{"type":"object","required":["id","label"],"properties":{"id":{"$ref":"#/$defs/id"},"label":{"type":"string","minLength":1,"maxLength":160},"picture":{"type":"string","pattern":"^[\\w-]{1,40}$"}}}},"answer":{"oneOf":[{"$ref":"#/$defs/id"},{"type":"array","minItems":2,"maxItems":4,"uniqueItems":true,"items":{"$ref":"#/$defs/id"}}]},"hint":{"type":"string","maxLength":600},"explanation":{"type":"string","maxLength":600},"narration":{"type":"string","maxLength":600}},"allOf":[{"if":{"properties":{"type":{"const":"order"}}},"then":{"properties":{"answer":{"type":"array"}}},"else":{"properties":{"answer":{"type":"string"}}}}]}}
+ },
+ "$defs":{"id":{"type":"string","pattern":"^[a-zA-Z0-9_-]{1,64}$"},"text":{"type":"string","minLength":1,"maxLength":400}},
+ "$comment":"The application additionally validates unique concept/question/choice IDs and labels, concept links and assessment coverage, and exactly one correct choice or a full ordering permutation."
+}

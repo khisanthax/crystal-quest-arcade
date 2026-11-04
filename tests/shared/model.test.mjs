@@ -1,0 +1,9 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {freshProgress} from '../../dist/ari/vocabulary.js';
+import {fresh} from '../../dist/kal/science.js';
+import {backup,parseBackup,writePlayer,readPlayer,SAVE_KEYS} from '../../dist/shared/saves.js';
+test('backup round-trip and importing one player never writes another key',()=>{const map=new Map(),storage={getItem:k=>map.get(k)||null,setItem:(k,v)=>map.set(k,v)};writePlayer(storage,'ari',freshProgress());const original=map.get(SAVE_KEYS.ari);writePlayer(storage,'kal',parseBackup(JSON.stringify(backup('kal',fresh()))).progress);assert.equal(map.get(SAVE_KEYS.ari),original);assert.equal(map.size,2);assert.equal(readPlayer(storage,'kal').version,1);});
+test('import rejects wrong namespace, malformed counters and unsafe HTML',()=>{assert.throws(()=>parseBackup('{}'));const p=freshProgress();p.stats.fossil.incorrect=-1;assert.throws(()=>backup('ari',p));const q=fresh();q.stats.moon.latest='<img src=x>';assert.throws(()=>backup('kal',q));assert.throws(()=>backup('ari',fresh()));});
+
+test('shared audio closes its active context and releases it',async()=>{const {createAudio}=await import('../../dist/shared/runtime.js');const old=globalThis.window;let closed=0;class FakeAudio{constructor(){this.currentTime=0;this.state='running';this.destination={};}resume(){}createOscillator(){return {frequency:{},connect(){},start(){},stop(){}};}createGain(){return {gain:{setValueAtTime(){},linearRampToValueAtTime(){},exponentialRampToValueAtTime(){}},connect(){}};}async close(){this.state='closed';closed++;}}globalThis.window={AudioContext:FakeAudio};try{const audio=createAudio({good:[500,700]});audio.play('good',true);await audio.close();await audio.close();assert.equal(closed,1);audio.play('good',false);await audio.close();assert.equal(closed,1);}finally{if(old===undefined)delete globalThis.window;else globalThis.window=old;}});

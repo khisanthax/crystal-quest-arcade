@@ -1,0 +1,45 @@
+export const PROFILES={ari:{name:'EMBERIA',subtitle:'Volcano Quest',lanes:6,speed:17,interval:12,spacing:3.2,theme:'volcano'},kal:{name:'LUMINARA',subtitle:'Star Quest',lanes:4,speed:12,interval:8,spacing:4,theme:'cosmic'}};
+export {WORLDS as THEMES} from './worlds.js';
+export function random(seed){let x=seed>>>0;return ()=>{x+=0x6D2B79F5;let t=Math.imul(x^x>>>15,1|x);t^=t+Math.imul(t^t>>>7,61|t);return ((t^t>>>14)>>>0)/4294967296;};}
+export function pattern(seed,index,lanes,stage=0,previous=1){const rng=random(seed+index*179+stage*999);const safe=Math.max(0,Math.min(lanes-1,previous+Math.floor(rng()*3)-1));const obstacles=[];for(let lane=0;lane<lanes;lane++){if(lane===safe||lane===previous)continue;if(rng()<.55+stage*.1){const types=['low','high','full','break'];obstacles.push({lane,type:types[(index+lane+Math.floor(rng()*4))%4],broken:false});}}if(!obstacles.length){const lane=(safe+2)%lanes;if(lane!==previous)obstacles.push({lane,type:['low','high','full','break'][index%4],broken:false});}return {safe,obstacles};}
+export function newRun(id,packId,settings={},seed=Date.now()%1000000){const p={...PROFILES[id],...settings};p.lanes=Math.max(3,Math.min(8,Math.round(p.lanes)));p.speed=Math.max(7,Math.min(26,p.speed));p.interval=Math.max(2,Math.min(20,Math.round(p.interval)));return {version:1,profile:id,packId,theme:p.theme,settings:p,seed,mode:'running',stage:0,distance:0,time:0,player:{lane:Math.floor(p.lanes/2),x:Math.floor(p.lanes/2),y:0,vy:0,slide:0,slideHeld:false,jumpBuffer:0,slideBuffer:0},hearts:3,invulnerable:3,crystals:0,score:0,streak:0,bestStreak:0,successful:0,sinceGate:0,gates:0,stageGates:0,groups:[],gems:[],pickups:[],portals:[],spawnIndex:0,nextGroup:65,lastSafe:Math.floor(p.lanes/2),stock:{shield:1,dash:0,blast:0},selectedPower:'shield',active:null,projectiles:[],bursts:[],pending:null,events:[],sessionSaved:false};}
+export function move(r,delta){r.player.lane=Math.max(0,Math.min(r.settings.lanes-1,r.player.lane+delta));}
+export function jump(r){r.player.jumpBuffer=.3;r.player.slideBuffer=0;}
+export const SLIDE_DURATION=1.8;
+export function slide(r){const p=r.player,speed=r.settings.speed*(1+r.stage*.08)*(r.active?.kind==='dash'?1.35:1);let duration=SLIDE_DURATION;
+ // An early tap within the visible warning window lasts through that beam.
+ for(const g of r.groups)if(!g.passed&&g.distance>=r.distance&&g.distance-r.distance<=speed*2.6&&g.obstacles.some(o=>!o.broken&&o.type==='high'&&(o.lane===p.lane||Math.abs(o.lane-p.x)<.55)))duration=Math.max(duration,(g.distance-r.distance)/speed+.35);
+ p.slide=Math.max(p.slide,duration);p.slideBuffer=.35;p.jumpBuffer=0;if(p.y>0)p.vy=Math.min(p.vy,-18);
+}
+export function holdSlide(r,held){r.player.slideHeld=!!held;}
+// These vertical bounds match the low-poly meshes. Being visibly above an
+// obstacle is a valid clearance, including a well-timed jump over a big rock.
+export const OBSTACLE_BOUNDS={low:{bottom:0,top:.68},high:{bottom:1.19,top:1.81},full:{bottom:0,top:3.1},break:{bottom:0,top:2}};
+export function clearsObstacle(player,type){const box=OBSTACLE_BOUNDS[type];if(!box)return false;const feet=player.y,head=feet+(player.slide>0?1.1:2.2);return feet>=box.top-.12||head<=box.bottom+.06;}
+export function activate(r,kind=r.selectedPower){if(r.mode!=='running'||!r.stock[kind])return false;r.stock[kind]--;if(kind==='blast')r.projectiles.push({lane:r.player.x,targetLane:r.player.lane,distance:r.distance,life:2});else r.active={kind,left:kind==='shield'?9:3};r.events.push({type:'power',kind});return true;}
+export function damage(r){if(r.invulnerable>0)return false;if(r.active?.kind==='shield'){r.active=null;r.events.push({type:'protected'});return false;}r.hearts--;r.streak=0;r.invulnerable=2;r.events.push({type:'hurt'});if(r.hearts===0){r.mode='question';r.events.push({type:'hearts'});}return true;}
+export function resume(r){r.mode='running';r.invulnerable=3;r.groups=[];r.gems=[];r.portals=[];r.pickups=[];r.projectiles=[];r.nextGroup=r.distance+r.settings.speed*5;r.player.y=0;r.player.vy=0;r.player.slide=0;r.player.slideHeld=false;r.player.jumpBuffer=0;r.player.slideBuffer=0;}
+export function nextStage(r){r.stage++;r.stageGates=0;r.sinceGate=0;r.hearts=3;delete r.finishDistance;resume(r);}
+function spawn(r){const i=r.spawnIndex++,distance=r.nextGroup;const data=pattern(r.seed,i,r.settings.lanes,r.stage,r.lastSafe);r.lastSafe=data.safe;r.groups.push({id:i,distance,obstacles:data.obstacles,safe:data.safe,passed:false});for(let j=0;j<4;j++)r.gems.push({id:`${i}-${j}`,lane:data.safe,distance:distance-13+j*3,taken:false,rare:j===3&&i%7===0});if(i%6===4)r.pickups.push({id:i,lane:data.safe,distance:distance-20,kind:['shield','dash','blast'][Math.floor(i/6)%3],taken:false});if(i%10===4)r.portals.push({id:i,lane:i%20===4?0:r.settings.lanes-1,distance:distance+r.settings.speed*1.6,passed:false});r.nextGroup+=r.settings.speed*r.settings.spacing;}
+export function step(r,dt){
+ r.events=[];if(r.mode!=='running')return r.events;dt=Math.min(.05,dt);const p=r.player;r.time+=dt;r.invulnerable=Math.max(0,r.invulnerable-dt);if(r.active){r.active.left-=dt;if(r.active.left<=0)r.active=null;}
+ p.x+=Math.sign(p.lane-p.x)*Math.min(Math.abs(p.lane-p.x),dt*6);p.jumpBuffer=Math.max(0,p.jumpBuffer-dt);p.slideBuffer=Math.max(0,p.slideBuffer-dt);p.slide=Math.max(0,p.slide-dt);
+ if(p.y<=0&&p.jumpBuffer>0){p.vy=11.5;p.jumpBuffer=0;p.slide=0;r.events.push({type:'jump'});}else if(p.y<=.05&&(p.slideHeld||p.slideBuffer>0)){p.slide=Math.max(p.slide,SLIDE_DURATION);p.slideBuffer=0;}
+ p.y=Math.max(0,p.y+p.vy*dt);p.vy=p.y>0?p.vy-16*dt:0;
+ const speed=r.settings.speed*(1+r.stage*.08)*(r.active?.kind==='dash'?1.35:1);r.distance+=speed*dt;
+ while(!r.finishDistance&&r.nextGroup<r.distance+100)spawn(r);
+ for(const b of r.projectiles){const from=b.distance,fromLane=b.lane;b.life-=dt;b.distance+=65*dt;const target=b.targetLane??b.lane;b.lane+=Math.sign(target-b.lane)*Math.min(Math.abs(target-b.lane),dt*12);
+  // Sweep the visible projectile through the entire frame before player damage.
+  // All track hazards can break; educational gates are separate and unaffected.
+  for(const g of r.groups)if(!g.passed&&g.distance>=from-1&&g.distance<=b.distance+1){const t=Math.max(0,Math.min(1,(g.distance-from)/(b.distance-from))),lane=fromLane+(b.lane-fromLane)*t;for(const o of g.obstacles)if(!o.broken&&OBSTACLE_BOUNDS[o.type]&&Math.abs(o.lane-lane)<=.72){o.broken=true;r.bursts.push({lane:o.lane,distance:g.distance,life:1});r.events.push({type:'smash'});}}
+ }
+ r.projectiles=r.projectiles.filter(b=>b.life>0);r.bursts.forEach(b=>b.life-=dt);r.bursts=r.bursts.filter(b=>b.life>0);
+ for(const g of r.gems)if(!g.taken&&Math.abs(g.distance-r.distance)<1.7&&Math.abs(p.x-g.lane)<(r.petAbility==='magnet'?.78:.55)){g.taken=true;r.bursts.push({lane:p.x,distance:r.distance-.8,life:.45});const n=g.rare?5:1;r.crystals+=n;r.score+=n*10;r.streak++;r.bestStreak=Math.max(r.streak,r.bestStreak);if(Math.floor((r.crystals-n)/12)<Math.floor(r.crystals/12))r.stock[r.selectedPower]=Math.min(3,r.stock[r.selectedPower]+1);r.events.push({type:'crystal',rare:g.rare});r.petCollected=(r.petCollected||0)+n;const threshold=r.petAbility==='fetch'?1:r.petAbility==='bonus'?2:0;if(threshold&&Math.floor((r.petCollected-n)/20)<Math.floor(r.petCollected/20))r.crystals+=threshold;}
+ if(r.streak>=12&&!r.achievements?.includes('crystal-trail')){r.achievements??=[];r.achievements.push('crystal-trail');r.crystals+=5;r.petXP=(r.petXP||0)+10;r.events.push({type:'achievement'});}
+ for(const g of r.gems)if(!g.taken&&!g.missed&&g.distance<r.distance-2){g.missed=true;r.streak=0;}for(const x of r.pickups)if(!x.taken&&Math.abs(x.distance-r.distance)<2&&Math.abs(x.lane-p.x)<.6){x.taken=true;r.stock[x.kind]=Math.min(3,r.stock[x.kind]+1);r.events.push({type:'pickup',kind:x.kind});}
+ for(const g of r.groups){if(g.passed||g.distance>r.distance)continue;g.passed=true;let lost=false;for(const o of g.obstacles){if(o.broken||Math.abs(o.lane-p.x)>.48)continue;if(r.active?.kind==='dash'&&o.type!=='full'){o.broken=true;r.bursts.push({lane:o.lane,distance:g.distance,life:1});r.events.push({type:'smash'});continue;}if(clearsObstacle(p,o.type))continue;lost=damage(r)||lost;}if(!lost){r.petXP=(r.petXP||0)+2;r.successful++;r.sinceGate++;r.score+=20;if(r.petAbility==='hop'&&r.successful%10===0)r.petXP+=5;if(r.successful%20===0&&['shield','dash'].includes(r.petAbility))r.stock[r.petAbility]=Math.min(3,r.stock[r.petAbility]+1);}if(r.mode!=='running')break;if(r.sinceGate>=r.settings.interval){r.sinceGate=0;r.gates++;r.stageGates++;r.mode='question';r.events.push({type:'gate'});break;}}
+ if(r.mode==='running')for(const ptl of r.portals)if(!ptl.passed&&ptl.distance<=r.distance){ptl.passed=true;if(Math.abs(p.x-ptl.lane)<.6){r.mode='question';r.events.push({type:'explore'});break;}}
+ r.groups=r.groups.filter(g=>g.distance>r.distance-15);r.gems=r.gems.filter(g=>g.distance>r.distance-15);r.pickups=r.pickups.filter(g=>g.distance>r.distance-15);r.portals=r.portals.filter(g=>g.distance>r.distance-15);
+ if(r.finishDistance&&r.mode==='running'&&r.distance>=r.finishDistance){r.mode='stage';r.events.push({type:'stage'});}
+ return r.events;
+}
