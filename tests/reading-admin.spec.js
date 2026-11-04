@@ -34,16 +34,23 @@ test('administrator form publishes durable assigned homework; child cannot read 
   await cp.getByRole('button',{name:'Published garden investigation'}).tap();
   await expect(cp.locator('.keyword-question')).toContainText('choose beans to plant');
   await keywordStep(cp,pack.questions[0]);
-  let pendingCheck;
-  await cp.route('**/api/reading-check',route=>{pendingCheck=route;},{times:1});
+  await cp.evaluate(()=>{
+   const fetch=window.fetch.bind(window);
+   window.fetch=(url,options)=>{
+    if(url==='/api/reading-check'&&JSON.parse(options.body).kind==='evidence'){
+     window.fetch=fetch;
+     return new Promise((_,reject)=>{window.failEvidenceCheck=()=>reject(new TypeError('Network error'));});
+    }
+    return fetch(url,options);
+   };
+  });
   const action=cp.locator('[data-primary]');
   await action.tap();
   await cp.locator('[data-sentence="1"]').tap();
   await action.tap();
   await expect(cp.locator('#evidence-feedback')).toHaveText('Checking your evidence…');
   await expect(action).toBeDisabled();
-  await expect.poll(()=>!!pendingCheck).toBe(true);
-  await pendingCheck.abort();
+  await cp.evaluate(()=>window.failEvidenceCheck());
   await expect(cp.locator('#evidence-feedback')).toContainText('Check your connection and try again');
   await expect(action).toBeEnabled();
   await expect(cp.locator('[data-sentence="1"]')).toHaveClass(/pending/);
