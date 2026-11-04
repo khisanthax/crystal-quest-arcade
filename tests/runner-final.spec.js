@@ -12,7 +12,34 @@ test('sky diagrams label sunrise east and sunset west during practice',async({pa
 });
 
 test('collecting a track crystal removes it once and creates visible sparkle state',async({page})=>{
- await page.goto('/');await page.clock.install();await page.locator('#choose-kal').tap();await page.locator('#new-run').tap();await page.locator('#map-next').tap();let collected=false;
- for(let i=0;i<90;i++){const s=await page.evaluate(()=>window.crystalQuest.run),next=s.groups.find(g=>!g.passed);if(next){for(let j=s.player.lane;j<next.safe;j++)await page.keyboard.press('ArrowRight');for(let j=s.player.lane;j>next.safe;j--)await page.keyboard.press('ArrowLeft');}await page.clock.runFor(100);const r=await page.evaluate(()=>window.crystalQuest.run);if(r.crystals>0){expect(r.gems.some(g=>g.taken)).toBe(true);expect(r.bursts.length).toBeGreaterThan(0);const n=r.crystals;await page.clock.runFor(60);expect((await page.evaluate(()=>window.crystalQuest.run)).crystals).toBe(n);collected=true;break;}}
+ await page.goto('/');
+ await page.clock.install();
+ await page.clock.pauseAt(new Date(Date.now()+1000));
+ await page.locator('#choose-kal').tap();
+ await page.locator('#new-run').tap();
+ await page.locator('#map-next').tap();
+ const run=()=>page.evaluate(()=>window.crystalQuest.run);
+ let collected=false;
+ for(let i=0;i<90;i++){
+  const before=await run(),next=before.groups.find(g=>!g.passed);
+  if(next){
+   for(let lane=before.player.lane;lane<next.safe;lane++)await page.keyboard.press('ArrowRight');
+   for(let lane=before.player.lane;lane>next.safe;lane--)await page.keyboard.press('ArrowLeft');
+  }
+  await page.clock.runFor(100);
+  const first=await run();
+  if(!first.crystals)continue;
+  const taken=first.gems.filter(g=>g.taken);
+  expect(taken.length).toBeGreaterThan(0);
+  expect(first.crystals).toBe(taken.reduce((total,g)=>total+(g.rare?5:1),0));
+  expect(first.bursts.length).toBeGreaterThan(0);
+  const takenIds=new Set(taken.map(g=>g.id));
+  await page.clock.runFor(60);
+  const after=await run();
+  const newlyTaken=after.gems.filter(g=>g.taken&&!takenIds.has(g.id));
+  expect(after.crystals-first.crystals).toBe(newlyTaken.reduce((total,g)=>total+(g.rare?5:1),0));
+  collected=true;
+  break;
+ }
  expect(collected).toBe(true);
 });
