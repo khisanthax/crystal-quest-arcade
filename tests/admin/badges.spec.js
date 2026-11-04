@@ -4,7 +4,7 @@ const ownerKey=process.env.CQ_GAME_MASTER_TEST_KEY;
 const maintenanceKey='disposable-game-master-maintenance-test-key';
 test.skip(!ownerKey,'Run with playwright.game-master.config.js.');
 
-test('owner creates, grants and retires a badge; only its recipient identity sees it',async({page,browser,baseURL})=>{
+test('owner grants standalone and mixed badges, rejects duplicate grants, and retires a badge',async({page,browser,baseURL})=>{
  const learner=await browser.newContext({baseURL,hasTouch:true,viewport:{width:1024,height:768}});
  const post=(context,route,data,headers={})=>context.request.post('/api/'+route,{data,headers:{Origin:baseURL,...headers}});
  const suffix=Date.now().toString(36);
@@ -63,10 +63,72 @@ test('owner creates, grants and retires a badge; only its recipient identity see
   await expect(shelf.getByText(badgeDescription)).toBeVisible();
   await expect(shelf.getByText('Rare',{exact:true})).toBeVisible();
 
+ const mixedPackage=page.locator('form[data-change="package-save"]');
+ const packageName='Library gift box '+suffix;
+ await mixedPackage.getByLabel('Package name').fill(packageName);
+ await mixedPackage.getByRole('spinbutton',{name:'Crystals',exact:true}).fill('30');
+ await mixedPackage.locator('select[name=food]').selectOption('apple');
+ await mixedPackage.locator('select[name=badge]').selectOption({label:'🏆 '+badgeName});
+ const preview=page.locator('#review');
+ const apply=async(form,label,reason)=>{
+  await form.getByLabel('Reason').fill(reason);
+  await form.getByRole('button',{name:label,exact:true}).tap();
+  await expect(preview).toContainText(badgeName+' collectible badge');
+ };
+ const confirm=async()=>{
+  await preview.getByRole('button',{name:'Apply confirmed change'}).tap();
+  await expect(page.locator('#status')).toContainText('Change saved.');
+  await expect(preview).toHaveCount(0);
+ };
+ await apply(mixedPackage,'Preview package changes','Save a mixed gift box');
+ await expect(preview).toContainText('◆ 30');
+ await expect(preview).toContainText('Apple × 1');
+ await confirm();
+
+ const packageGrant=page.locator('form[data-change="reward-package"]');
+ const chooseOwner=async form=>{
+  await form.getByLabel(recipient.username).uncheck();
+  await form.getByLabel(owner.username).check();
+ };
+ const prepareGrant=async reason=>{
+  await packageGrant.locator('select[name=id]').selectOption({label:packageName});
+  await chooseOwner(packageGrant);
+  await apply(packageGrant,'Preview package grant',reason);
+ };
+ await prepareGrant('Award the mixed gift box');
+ await expect(preview).toContainText('Apple × 1');
+ await confirm();
+ const ownerCloud=async()=> (await (await page.request.get('/api/me')).json()).data;
+ const badgeList=async profile=> (await (await post(page.context(),'collectible-badges',{profile})).json()).badges;
+ let ownerData=await ownerCloud();
+ expect(ownerData.profiles.ari.collection.wallet).toBe(30);
+ expect(ownerData.profiles.ari.collection.food.apple).toBe(1);
+ expect((await badgeList('emberia')).map(b=>b.name)).toContain(badgeName);
+ await prepareGrant('Verify duplicate ownership cannot pay twice');
+ await preview.getByRole('button',{name:'Apply confirmed change'}).tap();
+ await expect(preview.getByRole('alert')).toContainText(/already|owned/i);
+ ownerData=await ownerCloud();
+ expect(ownerData.profiles.ari.collection.wallet).toBe(30);
+ expect(ownerData.profiles.ari.collection.food.apple).toBe(1);
+ await preview.getByRole('button',{name:'Cancel'}).tap();
+
+ await page.locator('select[name=profile]').selectOption('luminara');
+ const gift=page.locator('form[data-change="reward"]');
+ await chooseOwner(gift);
+ await gift.getByRole('spinbutton',{name:'Crystals',exact:true}).fill('7');
+ await gift.locator('select[name=badge]').selectOption({label:'🏆 '+badgeName});
+ await apply(gift,'Preview gift','Give a one-time mixed gift');
+ await expect(preview).toContainText('◆ 7');
+ await confirm();
+ expect((await ownerCloud()).profiles.kal.collection.wallet).toBe(7);
+ expect((await badgeList('luminara')).map(b=>b.name)).toContain(badgeName);
+
   await editor.getByLabel('Saved badge').selectOption({label:badgeName});
   await editor.getByLabel('Available to award').uncheck();
   await commit(editor,'Preview badge changes','Retire the demo collectible','Collectible badge saved.');
   await expect(grant).toHaveCount(0);
+  await expect(page.getByText('Packages with retired badges need editing before they can be awarded.')).toBeVisible();
+  await expect(packageGrant.locator('option').filter({hasText:packageName})).toHaveCount(0);
 
   await child.reload();
   await expect(child.locator('#sync-status')).toContainText('Saved to cloud');

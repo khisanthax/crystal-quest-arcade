@@ -1,5 +1,9 @@
 # Changelog
 
+## Sites v28
+
+- Include a collectible badge in a reusable package or one-time gift. A retired, stale or already-owned badge blocks the whole grant.
+
 ## Sites v27
 
 - View owner-only study coverage, first-attempt accuracy, practice priorities, homework completion and world progress.

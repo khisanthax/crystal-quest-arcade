@@ -271,6 +271,8 @@ const safePin = pin => /^\d{4}$/.test(pin) && !/^(\d)\1{3}$/.test(pin) &&
  !['1234','4321','0123','9876','2580'].includes(pin) && !(Number(pin) >= 1900 && Number(pin) <= 2100);
 
 
+const hasInventoryReward = reward => !!(reward.crystals || reward.pet || reward.food || reward.accessory);
+
 function rewardContents(change,fail) {
  if (!change || typeof change !== 'object') fail(400,'Choose package rewards.');
  const reward = {type:'reward'};
@@ -281,7 +283,11 @@ function rewardContents(change,fail) {
   reward[field] = change[field];
  }
  if (reward.food) reward.foodQuantity = amount(change.foodQuantity ?? 1,1,10000,fail);
- if (!reward.crystals && !reward.pet && !reward.food && !reward.accessory) fail(400,'Choose at least one package reward.');
+ if (change.badge !== undefined) {
+  if (typeof change.badge !== 'string' || !change.badge) fail(400,'Choose a valid badge for this package.');
+  reward.badge = change.badge;
+ }
+ if (!hasInventoryReward(reward) && !reward.badge) fail(400,'Choose at least one package reward.');
  return reward;
 }
 
@@ -310,13 +316,19 @@ async function savePackage(body,{db,a,env,fail,response,randomToken}) {
  const old = editing ? await db.prepare('SELECT * FROM game_master_packages WHERE id=?').bind(id).first() : null;
  if (editing && (!old || body.version !== old.version)) fail(409,'Reload the package before editing it.');
  const change = rewardContents(body.change,fail);
+ const badge = change.badge ? await db.prepare('SELECT id,active,version FROM game_master_badges WHERE id=?').bind(change.badge).first() : null;
+ if (change.badge && (!badge || body.active && !badge.active)) fail(400,'Choose an active badge for this package.');
  const marker = randomToken(), now = Date.now();
  const next = {id,name,active:body.active,change,version:(old?.version ?? 0)+1,updated:now};
  const result = {package:next};
- const gate = editing ? 'EXISTS (SELECT 1 FROM game_master_packages WHERE id=? AND version=?)' : 'NOT EXISTS (SELECT 1 FROM game_master_packages WHERE id=?)';
+ const guards = [editing ? 'EXISTS (SELECT 1 FROM game_master_packages WHERE id=? AND version=?)' : 'NOT EXISTS (SELECT 1 FROM game_master_packages WHERE id=?)'];
  const args = editing ? [id,old.version] : [id];
+ if (badge) {
+  guards.push('EXISTS (SELECT 1 FROM game_master_badges WHERE id=? AND version=?)');
+  args.push(badge.id,badge.version);
+ }
  const applied = await db.batch([
-  db.prepare('INSERT OR IGNORE INTO game_master_requests (id,actor,fingerprint,marker,result,created) SELECT ?,?,?,?,?,? WHERE '+gate)
+  db.prepare('INSERT OR IGNORE INTO game_master_requests (id,actor,fingerprint,marker,result,created) SELECT ?,?,?,?,?,? WHERE '+guards.join(' AND '))
    .bind(requestId,a.id,fingerprint,marker,JSON.stringify(result),now,...args),
   db.prepare('INSERT INTO game_master_packages(id,name,active,payload,version,updated) SELECT ?,?,?,?,?,? WHERE '+requestGate+' ON CONFLICT(id) DO UPDATE SET name=excluded.name,active=excluded.active,payload=excluded.payload,version=excluded.version,updated=excluded.updated')
    .bind(id,name,Number(body.active),JSON.stringify(change),next.version,now,requestId,marker),
@@ -347,7 +359,7 @@ export async function gameMasterAction(body, {db,a,env,fail,response,checkedData
  if (body.action === 'badge-save') return saveBadge(body,{db,a,env,fail,response,randomToken,signature:gameMasterSignature,requestGate});
  if (body.action === 'packages') {
   const rows = (await db.prepare('SELECT * FROM game_master_packages ORDER BY name').all()).results;
-  return response({packages:rows.map(packageView)});
+  return response({packages:rows.map(packageView),badges:(await listBadges(db)).badges});
  }
  if (body.action === 'package-save') return savePackage(body,{db,a,env,fail,response,randomToken});
  if (body.action === 'random-recipient') {
@@ -399,13 +411,6 @@ export async function gameMasterAction(body, {db,a,env,fail,response,checkedData
  const prior = await existingRequest();
  if (prior) return replay(prior);
 
- let selectedBadge;
- if (change.type === 'badge') {
-  if (typeof change.id !== 'string') fail(400,'Choose an active collectible badge.');
-  const row = await db.prepare('SELECT * FROM game_master_badges WHERE id=? AND active=1').bind(change.id).first();
-  if (!row || row.version !== change.version) fail(409,'This badge changed. Reload and preview it again.');
-  selectedBadge = badgeView(row);
- }
  let chosenPackage;
  if (change.type === 'reward-package') {
   if (typeof change.id !== 'string') fail(400,'Choose an active reward package.');
@@ -414,6 +419,17 @@ export async function gameMasterAction(body, {db,a,env,fail,response,checkedData
   chosenPackage = packageView(row);
   change = chosenPackage.change;
  }
+ const standaloneBadge = change.type === 'badge';
+ const badgeId = standaloneBadge ? change.id : change.type === 'reward' ? change.badge : undefined;
+ let selectedBadge;
+ if (standaloneBadge || badgeId !== undefined) {
+  if (typeof badgeId !== 'string' || !badgeId) fail(400,'Choose an active collectible badge.');
+  const version = standaloneBadge ? change.version : body.change.badgeVersion;
+  const row = await db.prepare('SELECT * FROM game_master_badges WHERE id=? AND active=1').bind(badgeId).first();
+  if (!row || row.version !== version) fail(409,'This badge changed or was retired. Reload and preview the reward again.');
+  selectedBadge = badgeView(row);
+ }
+ const badgeOnly = !!selectedBadge && (standaloneBadge || !hasInventoryReward(change));
  const draw = body.draw;
  if (draw !== undefined) {
   const target = targets[0];
@@ -495,7 +511,10 @@ export async function gameMasterAction(body, {db,a,env,fail,response,checkedData
     columns.recovery_expires = recoveryExpiry();
     edit = {previous:{},updated:{recoveryRotated:true}};
    } else fail(400,'Choose an account action.');
-  } else if (selectedBadge) {
+  } else if (badgeOnly) {
+   edit = {previous:{},updated:{}};
+  } else edit = await editProfile({db,data,target,change,fail});
+  if (selectedBadge) {
    const alreadyOwned = await db.prepare('SELECT 1 FROM player_badges WHERE account_id=? AND profile=? AND badge_id=?')
     .bind(account.id,target.profile,selectedBadge.id).first();
    if (alreadyOwned) {
@@ -503,18 +522,25 @@ export async function gameMasterAction(body, {db,a,env,fail,response,checkedData
     if (existing) return replay(existing);
     fail(409,'A selected profile already owns this badge.');
    }
-   edit = {previous:{owned:false},updated:{owned:true,badge:selectedBadge}};
-  } else edit = await editProfile({db,data,target,change,fail});
+   if (badgeOnly) {
+    edit.previous.owned = false;
+    edit.updated.owned = true;
+   } else {
+    edit.previous.badgeOwned = false;
+    edit.updated.badgeOwned = true;
+   }
+   edit.updated.badge = selectedBadge;
+  }
   if (draw) edit.updated.randomDraw = draw.nonce;
   if (chosenPackage) edit.updated.package = {id:chosenPackage.id,name:chosenPackage.name,version:chosenPackage.version};
   audits.push({target,edit,action:draw ? 'reward:random' : chosenPackage ? 'reward-package' : change.operation ? change.type+':'+change.operation : change.type});
  }
- if (!selectedBadge) for (const r of records.values()) checkedData(r.data);
+ if (!badgeOnly) for (const r of records.values()) checkedData(r.data);
 
  // D1 batches are transactional. The marker makes every write conditional on
  // this exact batch successfully reserving the request against all revisions.
  const marker = randomToken(), now = Date.now();
- const revisions = [...records.values()].map(({account}) => ({account:account.id,revision:account.revision+(selectedBadge ? 0 : 1)}));
+ const revisions = [...records.values()].map(({account}) => ({account:account.id,revision:account.revision+(badgeOnly ? 0 : 1)}));
  const result = {applied:true,revisions};
  const guards = [...records.values()].map(() => 'EXISTS (SELECT 1 FROM explorers WHERE id=? AND revision=?)');
  const snapshots = [...records.values()].flatMap(({account}) => [account.id,account.revision]);
@@ -544,7 +570,7 @@ export async function gameMasterAction(body, {db,a,env,fail,response,checkedData
   batch.push(db.prepare('INSERT INTO player_badges (account_id,profile,badge_id,awarded) SELECT ?,?,?,? WHERE '+requestGate)
    .bind(target.account,target.profile,selectedBadge.id,now,requestId,marker));
  }
- if (!selectedBadge) for (const {account,data,columns,revoke} of records.values()) {
+ if (!badgeOnly) for (const {account,data,columns,revoke} of records.values()) {
   batch.push(db.prepare('INSERT OR IGNORE INTO save_history (account_id,revision,payload,created) SELECT id,revision,payload,? FROM explorers WHERE id=? AND '+requestGate)
    .bind(now,account.id,requestId,marker));
   const extra = Object.keys(columns).map(name => ','+name+'=?').join('');

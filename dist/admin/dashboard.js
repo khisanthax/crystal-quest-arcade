@@ -1,4 +1,5 @@
 import {mountBadges} from './badges.js';
+import {badgeIcon} from '/shared/badges.js';
 import {createRecoveryPassport} from '/cloud/client.bundle.js?v=passport-1';
 import {esc} from '/runner/parent.js';
 import {WORLDS} from '/runner/worlds.js';
@@ -22,7 +23,7 @@ const field = (label, name, attributes = '') => `<label>${label}<input name="${n
 const card = (label, value) => `<span class="chip">${label} <strong>${esc(value)}</strong></span>`;
 const state = {
   key: '', section: 'players', selected: null, profile: 'emberia', reportPack: null,
-  players: [], catalog: {}, detail: null, snapshots: [], draft: null, pending: false, load: 0, recovery: null
+  players: [], catalog: {}, detail: null, snapshots: [], rewardBadges: [], draft: null, pending: false, load: 0, recovery: null
 };
 
 function clearRecovery() {
@@ -185,6 +186,11 @@ function petPanel() {
   updatePetFields($('work').querySelector('form[data-change="pet"]'));
 }
 
+function badgeChoices(includeRetired) {
+  return [['', 'None'], ...state.rewardBadges.filter(badge => badge.active || badge.id === includeRetired)
+    .map(badge => [badge.id, badgeIcon(badge.icon) + ' ' + badge.name + (badge.active ? '' : ' (retired)')])];
+}
+
 function rewardItems() {
   return `<div class="fields">
     ${field('Crystals', 'crystals', 'type="number" min="0" step="1" value="0" required')}
@@ -192,6 +198,7 @@ function rewardItems() {
     ${select('Treat', 'food', [['', 'None'], ...catalogRows('food', false)])}
     ${field('Treat quantity', 'foodQuantity', 'type="number" min="1" step="1" value="1" required')}
     ${select('Accessory', 'accessory', [['', 'None'], ...catalogRows('accessories', false)])}
+    ${select('Collectible badge', 'badge', badgeChoices())}
   </div>`;
 }
 
@@ -200,8 +207,10 @@ async function rewardPanel(token) {
   const result = await request('packages');
   if (token !== state.load) return;
   state.packages = result.packages;
+  state.rewardBadges = result.badges || [];
   const recipients = state.players.filter(p => !p.disabled);
-  const active = state.packages.filter(p => p.active);
+  const enabled = state.packages.filter(p => p.active);
+  const active = enabled.filter(p => !p.change.badge || state.rewardBadges.some(badge => badge.id === p.change.badge && badge.active));
   const recipientFields = random => `<fieldset><legend>Recipients</legend>
       ${recipients.map(p => `<label class="check"><input name="recipients" type="checkbox" value="${esc(p.id)}"
         ${p.id === state.selected ? 'checked' : ''}> ${esc(p.username)}</label>`).join('')}
@@ -212,6 +221,7 @@ async function rewardPanel(token) {
     ${actionForm('reward', recipientFields(true) + rewardItems(), 'Preview gift')}
     ${active.length ? '<h3 class="section-gap">Award a saved package</h3>' +
       actionForm('reward-package', recipientFields(false) + select('Package', 'id', active.map(p => [p.id, p.name])), 'Preview package grant') : ''}
+    ${active.length !== enabled.length ? '<p>Packages with retired badges need editing before they can be awarded.</p>' : ''}
     <h3 class="section-gap">Create or edit a reward package</h3>
     <div class="fields">${select('Saved package', 'edit-package', [['', 'New package'],
       ...state.packages.map(p => [p.id, p.name + (p.active ? '' : ' (inactive)')])])}
@@ -228,6 +238,7 @@ function editPackage(id, duplicate = false) {
   const form = $('work').querySelector('form[data-change="package-save"]');
   const p = state.packages.find(x => x.id === id);
   form.reset();
+  form.elements.badge.innerHTML = options(badgeChoices(p?.change.badge), p?.change.badge);
   form.dataset.id = p && !duplicate ? p.id : '';
   const duplicateButton = $('work').querySelector('[data-action="duplicate-package"]');
   duplicateButton.disabled = !p || duplicate;
@@ -609,8 +620,10 @@ function rewardText(change) {
   const pet = state.catalog.pets.find(p => p.id === change.pet);
   const food = state.catalog.food.find(p => p.id === change.food);
   const accessory = state.catalog.accessories.find(p => p.id === change.accessory);
+  const badge = state.rewardBadges.find(p => p.id === change.badge);
   const gifts = [change.crystals > 0 && '◆ ' + change.crystals, pet?.species,
-    food && food.name + ' × ' + change.foodQuantity, accessory?.name].filter(Boolean);
+    food && food.name + ' × ' + change.foodQuantity, accessory?.name,
+    badge && badge.name + ' collectible badge' + (badge.active ? '' : ' (retired)')].filter(Boolean);
   if (!gifts.length) throw Error('Choose at least one gift.');
   return gifts.join(', ');
 }
@@ -628,6 +641,12 @@ function updatePetFields(form) {
   replaceField.disabled = !replacement;
   replaceField.required = replacement;
   $('replacement-field').hidden = !replacement;
+}
+
+function requireActiveBadge(id) {
+  const badge = state.rewardBadges.find(item => item.id === id && item.active);
+  if (!badge) throw Error('Choose an available badge before continuing.');
+  return badge;
 }
 
 function prepare(form) {
@@ -685,6 +704,7 @@ function prepare(form) {
     const {name, active, ...items} = change;
     const reward = {...items, type: 'reward'};
     if (!name) throw Error('Give the package a name.');
+    if (values.has('active') && reward.badge) requireActiveBadge(reward.badge);
     action = 'package-save';
     body = {requestId, confirmed: true, reason, name, active: values.has('active'), change: reward};
     if (form.dataset.id) {
@@ -695,7 +715,12 @@ function prepare(form) {
     description = (body.id ? 'Update ' : 'Create ') + name + ' (' + (body.active ? 'active' : 'inactive') +
       '). Contents: ' + rewardText(reward) + '.';
   } else {
-    if (change.type === 'reward-package') change.version = state.packages.find(p => p.id === change.id)?.version;
+    if (change.type === 'reward-package') {
+      const saved = state.packages.find(p => p.id === change.id);
+      change.version = saved?.version;
+      if (saved?.change.badge) change.badgeVersion = requireActiveBadge(saved.change.badge).version;
+    }
+    if (change.type === 'reward' && change.badge) change.badgeVersion = requireActiveBadge(change.badge).version;
     if (form.draw && targets.length === 1 && targets[0].account === form.draw.account) body.draw = form.draw.value;
     description = changeText(change, recipients, form);
   }
@@ -834,6 +859,7 @@ $('lock').addEventListener('click', async () => {
   state.catalog = {};
   state.audit = [];
   state.packages = [];
+  state.rewardBadges = [];
   state.snapshots = [];
   state.selected = null;
   state.reportPack = null;

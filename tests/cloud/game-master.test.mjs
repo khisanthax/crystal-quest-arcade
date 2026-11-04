@@ -453,3 +453,51 @@ test('Game Master reports are isolated, read-only, and contain coverage and home
  assert.equal((await h.call('me',null,h.child)).data.revision,0);
  assert.equal((await h.gm({action:'audit',account})).data.entries.length,0);
 });
+
+test('Reward packages grant badge and inventory atomically across profiles and reject stale or duplicate badges',async t=>{
+ const h=await setup(t);
+ const mint={action:'badge-save',requestId:crypto.randomUUID(),confirmed:true,name:'Birthday star',
+  description:'An exclusive collectible for a special day.',icon:'star',rarity:'RARE',active:true};
+ const badge=(await h.gm(mint)).data.badge;
+ const packageBody={action:'package-save',requestId:crypto.randomUUID(),confirmed:true,name:'Birthday gift',active:true,
+  change:{type:'reward',crystals:60,pet:'owl',food:'apple',foodQuantity:2,accessory:'cap',badge:badge.id}};
+ const invalid=await h.gm({...packageBody,change:{...packageBody.change,badge:'nonexistent-badge'}});
+ assert.equal(invalid.status,400);
+ const created=await h.gm(packageBody);
+ assert.equal(created.status,200,JSON.stringify(created.data));
+ const pkg=created.data.package;
+ const listing=(await h.gm({action:'packages'})).data;
+ assert.equal(listing.packages[0].change.badge,badge.id);
+ assert.equal(listing.badges[0].name,'Birthday star');
+ const bundle={type:'reward-package',id:pkg.id,version:pkg.version,badgeVersion:badge.version};
+ const both=[h.target(),h.target(0,'luminara')];
+ const stale=h.change({...bundle,badgeVersion:badge.version+1},0,both);
+ assert.equal((await h.gm(stale)).status,409);
+ assert.equal(await h.wallet(),0);
+ const grant=h.change(bundle,0,both);
+ const responses=await Promise.all([h.gm(grant),h.gm(grant)]);
+ assert.deepEqual(responses.map(r=>r.status),[200,200]);
+ assert.equal(responses.filter(r=>r.data.duplicate).length,1);
+ const child=(await h.call('me',null,h.child)).data;
+ assert.equal(child.revision,1);
+ for (const [key,profile] of [['ari','emberia'],['kal','luminara']]) {
+  const c=child.data.profiles[key].collection;
+  assert.deepEqual([c.wallet,c.pets[0].id,c.food.apple,c.accessories[0]],[60,'owl',2,'cap']);
+  assert.equal((await h.call('collectible-badges',{profile},h.child)).data.badges[0].id,badge.id);
+ }
+ const ownerTarget={account:h.a.data.account.id,profile:'emberia',revision:0};
+ const duplicates=h.change({type:'reward',crystals:90,badge:badge.id,badgeVersion:badge.version},1,[ownerTarget,h.target(1)]);
+ assert.equal((await h.gm(duplicates)).status,409);
+ assert.equal((await h.call('me',null,h.owner)).data.revision,0);
+ assert.deepEqual((await h.call('collectible-badges',{profile:'emberia'},h.owner)).data.badges,[]);
+ assert.equal(await h.wallet(),60);
+
+ const retire={...mint,id:badge.id,version:badge.version,requestId:crypto.randomUUID(),active:false};
+ assert.equal((await h.gm(retire)).status,200);
+ assert.equal((await h.gm(h.change({...bundle,badgeVersion:2},0,[ownerTarget]))).status,409);
+ assert.equal((await h.gm({...packageBody,requestId:crypto.randomUUID()})).status,400);
+ assert.equal((await h.call('me',null,h.owner)).data.revision,0);
+ const history=(await h.gm({action:'audit'})).data.entries.filter(r=>r.action==='reward-package');
+ assert.equal(history.length,2);
+ assert.ok(history.every(r=>r.updated.badge.id===badge.id && r.updated.wallet===60 && r.updated.package.id===pkg.id));
+});
