@@ -56,3 +56,50 @@ test('new recovery passports expire and pre-migration passports remain usable on
  assert.equal((await h.call('recover',{token:a.recovery},h.jar())).status,200);
  assert.equal((await h.call('recover',{token:a.recovery},h.jar())).status,401);
 });
+
+test('ordinary cloud saves cannot rewind paid course days or run cursors; resume can still add rewards',async t=>{
+ const h=harness(), j=h.jar(), a=await h.signup(j), data=a.data, p=data.profiles.ari;
+ t.after(()=>h.DB.close());
+ const run=newRun('ari','earth-science',{},76);
+ run.sessionId='qa-ledger-rewind';
+ const older=structuredClone(run);
+ run.crystals=80;
+ run.petXP=30;
+ queueReward(run,'gate',8,15,'gate:1');
+ bankRun(p,run,data.packs[run.packId]);
+ p.runs[run.packId]=run;
+ const first=await h.call('save',{requestId:'ledger-paid',revision:0,data},j);
+ assert.equal(first.status,200,JSON.stringify(first.data));
+ const paid=(await h.call('me',null,j)).data.data, paidProfile=paid.profiles.ari;
+ const today=Object.keys(paidProfile.rewardBook.days)[0];
+ const yesterday=new Date(Date.parse(today+'T00:00:00Z')-86400000).toISOString().slice(0,10);
+ const edits=[
+  book=>{book.days[today].crystals-=20;book.days[yesterday]={crystals:20,xp:0};},
+  book=>{book.days[yesterday]=book.days[today];delete book.days[today];},
+  book=>{book.days[today].xp--;},
+  book=>{delete book.runs[run.sessionId];},
+  book=>{book.runs[run.sessionId].events=[];},
+  ...['trackCrystals','trackXP','rawCrystals','rawXP','bonusCrystals','bonusXP'].map(field=>book=>{book.runs[run.sessionId][field]--;}),
+ ];
+ for(const [i,edit] of edits.entries()){
+  const rewind=structuredClone(paid);
+  edit(rewind.profiles.ari.rewardBook);
+  const reply=await h.call('save',{requestId:'rewind-paid-ledger-'+i,revision:1,data:rewind},j);
+  assert.equal(reply.status,409,JSON.stringify(reply.data));
+  assert.match(reply.data.error,/course reward history/i);
+ }
+
+ // Reopening an older local checkpoint does not rewind the separate paid ledger.
+ bankRun(paidProfile,older,paid.packs[run.packId]);
+ assert.equal(paidProfile.collection.wallet,88);
+ const resumed=paidProfile.runs[run.packId];
+ resumed.crystals+=12;
+ queueReward(resumed,'gate',8,15,'gate:2');
+ bankRun(paidProfile,resumed,paid.packs[run.packId]);
+ const advanced=await h.call('save',{requestId:'ledger-resume',revision:1,data:paid},j);
+ assert.equal(advanced.status,200,JSON.stringify(advanced.data));
+ const me=(await h.call('me',null,j)).data;
+ assert.equal(me.revision,2);
+ assert.equal(me.data.profiles.ari.collection.wallet,108);
+ assert.deepEqual(me.data.profiles.ari.rewardBook.runs[run.sessionId].events,['qa-ledger-rewind:gate:1','qa-ledger-rewind:gate:2']);
+});

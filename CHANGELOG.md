@@ -3,6 +3,7 @@
 ## Sites v28
 
 - Include a collectible badge in a reusable package or one-time gift. A retired, stale or already-owned badge blocks the whole grant.
+- Protect paid course reward history across ordinary cloud saves and checkpoint resume.
 
 ## Sites v27
 
