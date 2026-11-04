@@ -105,7 +105,8 @@ test('owner report switches identity and test while keeping learning, homework, 
     await repair.getByRole('button', {name: 'Preview change'}).tap();
     await expect(page.locator('#review')).toContainText('Mission 1');
     await page.getByRole('button', {name: 'Apply confirmed change'}).tap();
-    await expect(readingRow).toContainText(`${totalMissions - 1} of ${totalMissions} written · In progress`);
+    await expect(page.getByRole('status').first()).toContainText('Change saved.', {timeout: 15000});
+    await expect(readingRow).toContainText(`${totalMissions - 1} of ${totalMissions} written · In progress`, {timeout: 15000});
     await page.setViewportSize({width: 1024, height: 768});
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await page.screenshot({path: test.info().outputPath('progress-report-1024.png')});

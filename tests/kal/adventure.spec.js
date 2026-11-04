@@ -29,7 +29,7 @@ test('small-fact mistakes survive refresh, review just that question, and appear
 test('adventure pauses for two questions only; optional demos preserve retry history and return to play',async({page})=>{
  const progress=fresh();progress.run={level:0,checkpoint:900,done:[],taken:[],stars:0,score:0,crystals:[],observatory:0,answers:{},night:false};
  await page.addInitScript(({key,progress})=>{if(!localStorage.getItem(key))localStorage.setItem(key,JSON.stringify(progress));},{key:KEY,progress});
- await page.goto('/kal/');await page.clock.install();await page.locator('#play').tap();await advance(page,500);await page.locator('#action').tap();
+ await page.clock.install();await page.clock.pauseAt(new Date(Date.now()+1000));await page.goto('/kal/');await page.locator('#play').tap();await advance(page,500);await page.locator('#action').tap();
  expect((await state(page)).mode).toBe('question');expect((await state(page)).question.key).toBe('rotation');
  const right=(await state(page)).question.correct;await page.locator(`[data-choice]:not([data-choice="${right}"])`).first().tap();await page.locator('#try-demo').tap();
  expect((await state(page)).mode).toBe('demo');await demo(page);expect((await state(page)).question.attempt).toBe(1);await solve(page);
