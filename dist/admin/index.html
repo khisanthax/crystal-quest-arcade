@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="robots" content="noindex,nofollow">
+  <title>Game Master · Crystal Quest Arcade</title>
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/admin/style.css">
+  <script type="module" src="/admin/dashboard.js"></script>
+</head>
+<body>
+  <header class="top">
+    <a href="/" class="brand"><span aria-hidden="true">◆</span> Crystal Quest Arcade</a>
+    <button id="lock" hidden>Lock dashboard</button>
+  </header>
+  <main>
+    <div class="intro">
+      <p class="eyebrow">OWNER WORKSPACE</p>
+      <h1>Game Master</h1>
+      <p>Manage explorer accounts, rewards, and saved progress.</p>
+    </div>
+    <form id="unlock" class="panel">
+      <h2>Unlock the dashboard</h2>
+      <p>Enter the owner key for your signed-in administrator account.</p>
+      <label>Owner key<input name="key" type="password" required minlength="32" autocomplete="off"></label>
+      <button class="primary">Unlock dashboard</button>
+    </form>
+    <p id="status" class="status" role="status" aria-live="polite"></p>
+    <div id="dashboard" hidden>
+      <nav id="sections" aria-label="Game Master sections"></nav>
+      <div class="workspace">
+        <aside id="players" class="panel" aria-label="Explorer accounts">
+          <label>Find an explorer<input id="search" type="search" autocomplete="off" placeholder="Username"></label>
+          <div id="player-list"></div>
+        </aside>
+        <section id="work" class="panel" aria-label="Selected task"></section>
+      </div>
+    </div>
+  </main>
+</body>
+</html>

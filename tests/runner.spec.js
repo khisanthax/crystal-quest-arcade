@@ -15,9 +15,27 @@ test('both third-person worlds render, run automatically, accept smooth swipes, 
 
 async function steer(p,lane){const r=(await state(p)).run;for(let i=r.player.lane;i<lane;i++)await p.keyboard.press('ArrowRight');for(let i=r.player.lane;i>lane;i--)await p.keyboard.press('ArrowLeft');}
 async function seed(p,data){await p.addInitScript(({key,data})=>{if(!localStorage.getItem(key))localStorage.setItem(key,JSON.stringify(data));},{key:KEY,data});}
-for(const id of ['ari','kal'])test(id+' completes a full three-stage runner through real controls and questions',async({page},info)=>{
- const d=freshData();d.profiles[id].settings.interval=2;await seed(page,d);await start(page,id);let won=false,questions=0,stages=new Set();
- for(let i=0;i<1800;i++){const s=await state(page);if(s.mode==='victory'){won=true;break;}if(s.mode==='question'){questions++;await answer(page);continue;}if(s.mode==='reward'){await page.locator('[data-reward="blast"]').tap();continue;}if(s.mode==='stage'){stages.add(s.run.stage);await page.locator('#next-stage').tap();continue;}expect(s.mode).toBe('play');const next=s.run.groups.find(g=>!g.passed);if(next)await steer(page,next.safe);await page.clock.runFor(300);}
+for(const id of ['ari','kal'])test(`${id==='ari'?'Emberia':'Luminara'} completes a full three-stage runner through real controls and questions`,async({page},info)=>{
+ // A short landscape viewport and reduced motion keep software WebGL responsive for this long playthrough.
+ await page.setViewportSize({width:844,height:390});
+ await page.emulateMedia({reducedMotion:'reduce'});
+ const d=freshData();d.profiles[id].settings.interval=2;await seed(page,d);await start(page,id);await page.clock.pauseAt(new Date(Date.now()+1000));let won=false,questions=0,stages=new Set();
+ for(let i=0;i<900;i++){
+  const s=await page.evaluate(()=>{
+   const {mode,run}=window.crystalQuest;
+   return {mode,stage:run.stage,lane:run.player.lane,safe:run.groups.find(g=>!g.passed)?.safe};
+  });
+  if(s.mode==='victory'){won=true;break;}
+  if(s.mode==='question'){questions++;await answer(page);continue;}
+  if(s.mode==='reward'){await page.locator('[data-reward="blast"]').tap();continue;}
+  if(s.mode==='stage'){stages.add(s.stage);await page.locator('#next-stage').tap();continue;}
+  expect(s.mode).toBe('play');
+  if(s.safe!==undefined){
+   for(let lane=s.lane;lane<s.safe;lane++)await page.keyboard.press('ArrowRight');
+   for(let lane=s.lane;lane>s.safe;lane--)await page.keyboard.press('ArrowLeft');
+  }
+  await page.clock.runFor(650);
+ }
  expect(won).toBe(true);expect([...stages]).toEqual([0,1,2]);expect(questions).toBeGreaterThanOrEqual(12);const s=await state(page);expect(s.run.crystals).toBeGreaterThan(0);expect(s.data.profiles[id].rewards.filter(r=>r.kind==='stage')).toHaveLength(3);expect(s.data.profiles[id].sessions).toBe(1);await page.screenshot({path:`artifacts/crystal-runner-victory-${id}-${info.project.name}.png`});await page.reload();await page.locator('#choose-'+id).tap();await page.locator('#continue-adventure').tap();expect((await state(page)).mode).toBe('victory');
 });
 
@@ -40,5 +58,5 @@ test('question refresh resumes the same attempt and optional touch controls work
 
 test('landscape iPad layouts fit, rotate pauses safely, cached restoration and repeated swipes release cleanly',async({page})=>{
  await start(page,'kal');for(const size of [{width:1024,height:768},{width:1194,height:834},{width:1366,height:1024},{width:844,height:390}]){await page.setViewportSize(size);expect(await page.evaluate(()=>document.documentElement.scrollHeight<=innerHeight)).toBe(true);for(const action of ['left','right','jump','slide','power']){const b=await page.locator(`[data-action="${action}"]`).boundingBox();expect(b.x).toBeGreaterThanOrEqual(0);expect(b.x+b.width).toBeLessThanOrEqual(size.width);expect(b.y+b.height).toBeLessThanOrEqual(size.height);}}
- const lane=(await state(page)).run.player.lane;await page.locator('#scene').dispatchEvent('pointerdown',{pointerId:2,clientX:500,clientY:250});for(const x of [440,350,200])await page.locator('#scene').dispatchEvent('pointermove',{pointerId:2,clientX:x,clientY:250});await page.locator('#scene').dispatchEvent('pointercancel',{pointerId:2});expect((await state(page)).run.player.lane).toBe(lane-1);await page.setViewportSize({width:768,height:1024});await expect(page.locator('#rotate')).toBeVisible();expect((await state(page)).mode).toBe('pause');const dist=(await state(page)).run.distance;await page.clock.runFor(2000);expect((await state(page)).run.distance).toBe(dist);await page.setViewportSize({width:1024,height:768});await page.locator('#resume').tap();await page.evaluate(()=>window.dispatchEvent(new PageTransitionEvent('pagehide',{persisted:true})));await page.evaluate(()=>window.dispatchEvent(new PageTransitionEvent('pageshow',{persisted:true})));expect((await state(page)).mode).toBe('pause');await page.locator('#resume').tap();await page.clock.runFor(300);expect((await state(page)).run.distance).toBeGreaterThan(dist);expect((await state(page)).loops).toBe(1);
+ const lane=(await state(page)).run.player.lane;await page.locator('#scene').dispatchEvent('pointerdown',{pointerId:2,clientX:500,clientY:250});for(const x of [440,350,200])await page.locator('#scene').dispatchEvent('pointermove',{pointerId:2,clientX:x,clientY:250});await page.locator('#scene').dispatchEvent('pointercancel',{pointerId:2});expect((await state(page)).run.player.lane).toBe(lane-1);await page.setViewportSize({width:768,height:1024});await expect(page.locator('#rotate')).toBeVisible();await expect.poll(async()=>{await page.clock.runFor(32);return (await state(page)).mode;}).toBe('pause');const dist=(await state(page)).run.distance;await page.clock.runFor(2000);expect((await state(page)).run.distance).toBe(dist);await page.setViewportSize({width:1024,height:768});await page.locator('#resume').tap();await page.evaluate(()=>window.dispatchEvent(new PageTransitionEvent('pagehide',{persisted:true})));await page.evaluate(()=>window.dispatchEvent(new PageTransitionEvent('pageshow',{persisted:true})));expect((await state(page)).mode).toBe('pause');await page.locator('#resume').tap();await page.clock.runFor(300);expect((await state(page)).run.distance).toBeGreaterThan(dist);expect((await state(page)).loops).toBe(1);
 });

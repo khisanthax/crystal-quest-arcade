@@ -7,9 +7,19 @@ export async function readingRequest(action,body={}){
  let res,data;try{res=await fetch('/api/reading-'+action,{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});data=await res.json();}catch{throw Error('Could not reach the homework service. Check your connection and try again.');}if(!res.ok)throw Error(data.error||'The worksheet service is unavailable.');return data;
 }
 export async function openAdmin({screen,on,back,enter}){
- let access;try{access=await readingRequest('access');}catch{access={};}
+ let access;
+ try{access=await readingRequest('access');}catch{access={};}
  if(access.admin){enter();return;}
- screen('<section class="panel"><h2>Administrator access</h2><p>Sign in to the designated administrator Explorer to manage homework and study packs.</p><button id="admin-back">Back</button></section>','reading-import');
+ let heading='Administrator access';
+ let description='<p>Sign in to the designated administrator Explorer to manage homework and study packs.</p>';
+ if(access.setupRequired){
+  heading='Owner setup required';
+  description='<p>Ask the site owner to configure the Game Master access key before opening the workshop.</p>';
+ }else if(access.locked){
+  heading='Unlock Game Master';
+  description='<p>Enter the owner key in Game Master, then return to the workshop.</p><a href="/admin">Open Game Master</a>';
+ }
+ screen(`<section class="panel"><h2>${heading}</h2>${description}<button id="admin-back">Back</button></section>`,'reading-import');
  on('admin-back',back);
 }
 export function homeworkAdmin({screen,on,back,getProfile}){

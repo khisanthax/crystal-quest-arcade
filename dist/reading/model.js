@@ -22,14 +22,15 @@ export function checkEvidence(pack,q,selection){
  return q.evidence.find(e=>{if(e.paragraphId!==a.id)return false;if(e.start===selection.start&&e.end===selection.end)return true;if(!Number.isInteger(e.quoteStart)||!Number.isInteger(e.quoteEnd))return false;const quote=words(a.text.slice(e.quoteStart,e.quoteEnd));if(!quote.length)return false;return selection.start>=e.start&&selection.end<=e.end&&selection.start<=e.quoteStart+quote[0].start&&selection.end>=e.quoteStart+quote.at(-1).end;})||null;
 }
 export function evidenceSegments(s,id){
- const saved=s.evidence[id];if(saved?.segments)return saved.segments;
- const list=[...(s.evidenceClaims?.[id]||[]),...(saved?[saved]:[])];
+ const saved=s.evidence[id];
+ const verified=saved?.segments??(saved?[saved]:[]);
+ const list=[...verified,...(s.evidenceClaims?.[id]||[])];
  return list.filter((e,i)=>list.findIndex(x=>x.paragraphId===e.paragraphId&&x.start===e.start&&x.end===e.end)===i);
 }
 export function claimEvidence(pack,q,s,selection){
  const match=checkEvidence(pack,q,selection);if(!match)return {correct:false,complete:false};
  s.evidenceClaims??={};const claims=s.evidenceClaims[q.id]??=[];
- if(!claims.some(e=>e.paragraphId===match.paragraphId&&e.start===match.start&&e.end===match.end))claims.push({...selection,evidenceIndex:q.evidence.indexOf(match),explanation:match.explanation});
+ if(!claims.some(e=>e.paragraphId===selection.paragraphId&&e.start===selection.start&&e.end===selection.end))claims.push({...selection,evidenceIndex:q.evidence.indexOf(match),explanation:match.explanation});
  const groups=q.evidenceGroups||q.evidence.map((_,i)=>[i]);
  const has=i=>claims.some(e=>e.evidenceIndex===i||(e.paragraphId===q.evidence[i].paragraphId&&e.start===q.evidence[i].start&&e.end===q.evidence[i].end));
  const done=groups.find(g=>g.every(has)),best=groups.reduce((a,b)=>b.filter(has).length/b.length>a.filter(has).length/a.length?b:a,groups[0]);

@@ -9,6 +9,7 @@ Use Node.js 24 or newer.
 ```sh
 npm ci
 npm run check
+npm run lint
 npm test
 npm run build
 npm start
@@ -35,3 +36,9 @@ Guest progress lives in the browser. Explorer accounts use enrolled devices, rem
 ## Deployment
 
 `npm run build` builds static assets, a service worker and the cloud Worker. Static HTTPS hosting supports device-local play. For accounts and cloud saves, use the Worker entry in `dist/server/index.js` with D1, apply the checked-in migrations, and configure the deployment secrets outside the repository. The [release runbook](docs/RELEASE.md) covers backup and rollback.
+
+See [Game Master Dashboard](docs/GAME-MASTER.md) for owner setup and tested administration workflows.
+
+See [sprint verification](docs/SPRINT-VERIFICATION.md) for exercised workflows and remaining device checks. A permissive license is pending review of code and asset rights.
+
+GitHub Actions checks installs, source, tests and builds on every branch push. Pull requests and the default branch also run the Chromium and WebKit suites.

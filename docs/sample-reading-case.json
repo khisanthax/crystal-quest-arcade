@@ -58,11 +58,6 @@
       "keywordGroups": [
         {
           "any": [
-            "why"
-          ]
-        },
-        {
-          "any": [
             "beans",
             "choose beans"
           ]
@@ -73,7 +68,7 @@
           "paragraphId": "p1",
           "start": 48,
           "end": 90,
-          "explanation": "Your selected sentence gives the detail this mission asks about."
+          "explanation": "Your selected words give the detail this mission asks about."
         }
       ],
       "hints": [
@@ -91,11 +86,6 @@
       "keywordGroups": [
         {
           "any": [
-            "where"
-          ]
-        },
-        {
-          "any": [
             "garden",
             "plant"
           ]
@@ -106,7 +96,7 @@
           "paragraphId": "p1",
           "start": 0,
           "end": 47,
-          "explanation": "Your selected sentence gives the detail this mission asks about."
+          "explanation": "Your selected words give the detail this mission asks about."
         }
       ],
       "hints": [
@@ -124,11 +114,6 @@
       "keywordGroups": [
         {
           "any": [
-            "why"
-          ]
-        },
-        {
-          "any": [
             "water",
             "roots"
           ]
@@ -139,7 +124,7 @@
           "paragraphId": "p2",
           "start": 41,
           "end": 97,
-          "explanation": "Your selected sentence gives the detail this mission asks about."
+          "explanation": "Your selected words give the detail this mission asks about."
         }
       ],
       "hints": [
@@ -165,11 +150,6 @@
       "keywordGroups": [
         {
           "any": [
-            "what"
-          ]
-        },
-        {
-          "any": [
             "grew",
             "Friday",
             "soil"
@@ -181,7 +161,7 @@
           "paragraphId": "p3",
           "start": 0,
           "end": 52,
-          "explanation": "Your selected sentence gives the detail this mission asks about."
+          "explanation": "Your selected words give the detail this mission asks about."
         }
       ],
       "hints": [
@@ -199,11 +179,6 @@
       "keywordGroups": [
         {
           "any": [
-            "who"
-          ]
-        },
-        {
-          "any": [
             "plant",
             "row",
             "Mira"
@@ -215,7 +190,7 @@
           "paragraphId": "p3",
           "start": 53,
           "end": 142,
-          "explanation": "Your selected sentence gives the detail this mission asks about."
+          "explanation": "Your selected words give the detail this mission asks about."
         }
       ],
       "hints": [
@@ -226,6 +201,71 @@
       "regionHint": "Look for an idea about the garden and the action in your question.",
       "rescue": "Ask a grown-up to compare the question and paragraph ideas with you.",
       "outline": "Say the idea aloud, then write your own sentence."
+    },
+    {
+      "id": "q6",
+      "text": "How long had the weather been sunny?",
+      "keywordGroups": [
+        {
+          "any": [
+            "weather",
+            "sunny"
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "paragraphId": "p2",
+          "start": 0,
+          "end": 40,
+          "explanation": "Your selected words give the detail this mission asks about."
+        }
+      ],
+      "hints": [
+        "Think about the action in your question.",
+        "Compare the ideas you have already read.",
+        "Think about the topic connected to your mission."
+      ],
+      "regionHint": "Look for an idea about the garden and the action in your question.",
+      "rescue": "Ask a grown-up to compare the question and paragraph ideas with you.",
+      "outline": "Say the idea aloud, then write your own sentence."
+    },
+    {
+      "id": "q7",
+      "text": "What bird watched from the fence?",
+      "keywordGroups": [
+        {
+          "any": [
+            "bird",
+            "fence"
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "paragraphId": "p2",
+          "start": 98,
+          "end": 129,
+          "explanation": "Your selected words give the detail this mission asks about."
+        }
+      ],
+      "hints": [
+        "Think about the action in your question.",
+        "Compare the ideas you have already read.",
+        "Think about the topic connected to your mission."
+      ],
+      "regionHint": "Look for an idea about the garden and the action in your question.",
+      "rescue": "Ask a grown-up to compare the question and paragraph ideas with you.",
+      "outline": "Say the idea aloud, then write your own sentence.",
+      "worksheet": {
+        "type": "multiple_choice",
+        "choices": [
+          "A crow",
+          "A robin",
+          "A sparrow"
+        ],
+        "answer": 1
+      }
     }
   ]
 }
