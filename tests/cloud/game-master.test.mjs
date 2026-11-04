@@ -192,3 +192,47 @@ test('Course and mission repair are targeted and a gameplay restore preserves cu
  assert.equal(restored.collection.pets[0].species,'dragon');
  assert.equal(restored.homework.cases[pack.id][0].written.q1,undefined);
 });
+
+test('Exclusive collectible badges are private, auditable, versioned and safe to grant in bulk',async t=>{
+ const h=await setup(t);
+ const mint={action:'badge-save',requestId:crypto.randomUUID(),confirmed:true,name:'Star Reader',
+  description:'A special reward for excellent detective work.',icon:'star',rarity:'RARE',active:true};
+ assert.equal((await h.gm(mint,h.child)).status,403);
+ assert.equal((await h.gm({...mint,icon:'https://not-an-icon.example'})).status,400);
+ const first=await h.gm(mint);
+ assert.equal(first.status,200,JSON.stringify(first.data));
+ const badge=first.data.badge;
+ assert.equal((await h.gm(mint)).data.duplicate,true);
+ assert.deepEqual((await h.gm({action:'badges'})).data.badges,[badge]);
+ const owned=(profile,jar=h.child)=>h.call('collectible-badges',{profile},jar);
+ assert.equal((await owned('emberia',{})).status,401);
+ assert.equal((await owned('ari')).status,400);
+ assert.deepEqual((await owned('emberia')).data.badges,[]);
+ const ownerTarget={account:h.a.data.account.id,profile:'luminara',revision:0};
+ const grant=h.change({type:'badge',id:badge.id,version:badge.version},0,[h.target(),ownerTarget]);
+ const replies=await Promise.all([h.gm(grant),h.gm(grant)]);
+ assert.deepEqual(replies.map(r=>r.status),[200,200]);
+ assert.equal(replies.filter(r=>r.data.duplicate).length,1);
+ assert.equal(replies[0].data.revisions[0].revision,0);
+ const childBadge=(await owned('emberia')).data.badges[0];
+ assert.equal(childBadge.id,badge.id);
+ assert.equal(childBadge.rarity,'RARE');
+ assert.equal(typeof childBadge.awarded,'number');
+ assert.deepEqual((await owned('luminara')).data.badges,[]);
+ assert.equal((await owned('luminara',h.owner)).data.badges[0].id,badge.id);
+ assert.deepEqual((await owned('emberia',h.owner)).data.badges,[]);
+ const rejected=await h.gm(h.change(grant.change,0,[h.target(0,'luminara'),h.target()]));
+ assert.equal(rejected.status,409);
+ assert.deepEqual((await owned('luminara')).data.badges,[]);
+ const edit={...mint,requestId:crypto.randomUUID(),id:badge.id,version:1,name:'Star Detective',active:false};
+ assert.equal((await h.gm(edit)).status,200);
+ assert.equal((await owned('emberia')).data.badges[0].name,'Star Detective');
+ assert.equal((await h.gm(h.change({...grant.change,version:2},0,[h.target(0,'luminara')]))).status,409);
+ assert.equal((await h.gm({...edit,requestId:crypto.randomUUID(),active:true})).status,409);
+ const backup=(await h.gm({action:'backup',account:h.target().account})).data.players[0];
+ assert.equal(backup.badges.emberia[0].name,'Star Detective');
+ assert.deepEqual(backup.badges.luminara,[]);
+ const history=(await h.gm({action:'audit'})).data.entries;
+ assert.equal(history.filter(x=>x.action==='badge').length,2);
+ assert.equal(history.filter(x=>x.action==='badge:save').length,2);
+});

@@ -1,3 +1,4 @@
+import {showCollectibleBadges} from './earned-badges.js';
 import {openAdmin} from '../reading/admin.js';
 import {cloudAccounts} from '../cloud/client.bundle.js';
 import {readingUI,detectiveArt} from '../reading/ui.js';
@@ -77,7 +78,20 @@ function victory(){run.mode='victory';data.profiles[profile].lastSession=new Dat
 function practiceMenu(){const p=data.profiles[profile],pack=data.packs[p.selectedLevel||p.activePack];screen(`<section class="panel"><p class="eyebrow">${esc(pack.title)}</p><h2>Little practice. Big discoveries.</h2><p>Up to five short questions at a time.</p><div class="menu-grid"><button id="all" class="primary">PRACTICE EVERYTHING</button><button id="missed">PRACTICE MY MISTAKES</button><button id="words">Flashcards & Facts</button><button id="menu">PLAYER MENU</button></div></section>`,'practice-menu');on('all',()=>practice(profile,pack.id,false));on('missed',()=>practice(profile,pack.id,true));on('words',()=>study(pack.id,0,false));on('menu',()=>playerMenu());}
 function practice(id,packId,missed){stash();run=null;profile=id;const pack=data.packs[packId],keys=chooseQuestions(pack,history(data,id,packId),Math.min(5,pack.questions.length),missed);if(!keys.length){screen(`<section class="panel"><h2>No mistakes waiting!</h2><p>Keep exploring, or try a little practice.</p><div class="row"><button class="primary" id="all">PRACTICE FOR TEST</button><button id="menu">PLAYER MENU</button></div></section>`,'practice-result');on('all',()=>practice(id,packId,false));on('menu',()=>playerMenu());return;}practicePending={reason:'practice',packId,keys,index:0,attempt:0,solved:false,begun:false,order:[]};showQuestion();}
 function study(packId,index,flipped){const list=[...data.packs[packId].vocabulary,...data.packs[packId].facts];if(!list.length){practiceMenu();return;}const c=list[index];screen(`<section class="panel"><p class="eyebrow">MY STUDY MATERIAL • ${index+1}/${list.length}</p><button id="flip" class="study-definition">${esc(flipped?c.definition:c.term||c.definition)}<small>TAP TO FLIP</small></button><div class="row"><button id="prev">← PREVIOUS</button><button id="read">🔊 SPEAK ALOUD</button><button id="next">NEXT →</button><button id="back">BACK TO PRACTICE</button></div></section>`,'study');on('flip',()=>study(packId,index,!flipped));on('prev',()=>study(packId,(index+list.length-1)%list.length,false));on('next',()=>study(packId,(index+1)%list.length,false));on('read',()=>speak((c.term||'')+'. '+c.definition));on('back',practiceMenu);}
-function rewards(){const p=data.profiles[profile];screen(`<section class="panel"><p class="eyebrow">${PROFILES[profile].name} • TREASURE SHELF</p><div class="treasure">🏆</div><h2>My rewards</h2><p>◆ ${p.crystals} lifetime crystals • High score ${p.highScore}</p>${p.rewards.length?'<div class="stats">'+p.rewards.slice(-12).map(r=>`<div class="stat">◆<strong style="font-size:16px">${esc(r.title)}</strong>${esc(new Date(r.date).toLocaleDateString())}</div>`).join('')+'</div>':'<p>Cross a stage finish line to earn your first trophy!</p>'}<button id="menu">PLAYER MENU</button></section>`,'rewards');on('menu',()=>playerMenu());}
+function rewards(){
+ const p=data.profiles[profile];
+ const title=PROFILES[profile].name;
+ const earned=p.rewards.slice(-12).map(r=>`<div class="stat">◆<strong style="font-size:16px">${esc(r.title)}</strong>
+  ${esc(new Date(r.date).toLocaleDateString())}</div>`).join('');
+ const collectibles=cloud?.active?'<section id="collectible-badges"><h3>Collectible badges</h3><div data-badge-shelf aria-live="polite">Loading collectible badges…</div></section>':'';
+ screen(`<section class="panel"><p class="eyebrow">${title} • TREASURE SHELF</p><div class="treasure">🏆</div><h2>My rewards</h2>
+  <p>◆ ${p.crystals} lifetime crystals • High score ${p.highScore}</p>
+  ${earned?'<div class="stats">'+earned+'</div>':'<p>Cross a stage finish line to earn your first trophy!</p>'}
+  ${collectibles}<button id="menu">PLAYER MENU</button></section>`,'rewards');
+ on('menu',()=>playerMenu());
+ const shelf=$('collectible-badges');
+ if(shelf)showCollectibleBadges(shelf,title.toLowerCase());
+}
 function parentGate(){return openAdmin({screen,on,back:()=>profile?playerMenu():home(),enter:parents.settings});}
 const shops=collectionUI({getData:()=>data,getProfile:()=>profile,save,screen,on,notice,chooseWorld:world=>{data.profiles[profile].theme=world;save();playerMenu();},chooseLevel:packId=>{data.profiles[profile].selectedLevel=packId;save();const t=testReturn;testReturn=null;if(t)showMap(t.mode,t.world);else playerMenu();},showPet:pet=>{preview.pet=pet;},back:()=>{const t=testReturn;testReturn=null;if(t){showMap(t.mode,t.world);return;}if(run?.mode==='stage')stageFinish();else playerMenu();}});
 const parents=parentUI({getData:()=>data,replaceData:d=>{stash();run=null;profile=null;data=d;},save,screen,on,home,practice,homework:id=>{profile=id;detective.workshop();}});

@@ -1,6 +1,6 @@
 # Release runbook
 
-1. Run `npm ci`, `npm run check`, `npm test`, `npm run build`, and the Chromium and WebKit Playwright suites.
+1. Run `npm ci`, `npm run check`, `npm run lint`, `npm test`, `npm run build`, and the Chromium and WebKit Playwright suites.
 2. Check the build on a disposable explorer account. Verify save/resume, a purchase and a Reading Detective publication. Test touch, audio and recovery from Files on a physical iPad when available.
 3. Export a private verified database backup before migrations. Retain the current deployed version and its commit ID. Apply migrations in journal order and verify the database binding before publishing.
 4. Deploy the tested build to the existing site. Verify the game picker and a read-only API response on the live origin. Tag the release only after verification.

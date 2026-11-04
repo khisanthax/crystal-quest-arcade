@@ -1,6 +1,12 @@
 # Changelog
 
-## Sprint release candidate
+## Sites v24
+
+- Create and grant exclusive collectible badges through Game Master. Players see earned badges in Rewards.
+- Download a private recovery QR PNG after rotating an explorer credential.
+- Decode shop portraits as cards approach the viewport. Keep full companion art in the preview.
+
+## Sites v23
 
 - Reading Detective accepts optional keyword selections, separates scrolling from evidence taps, supports keyboard selection, and preserves additional verified evidence without paying twice.
 - The Crystal Store shows paid previews for higher-tier pets and disables confirmation when the wallet is short. Runner controls clear stale swipe state when play loses focus.

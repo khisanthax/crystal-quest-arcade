@@ -12,7 +12,7 @@ For hosting, configure `CQ_GAME_MASTER_KEY` as a secret with at least 32 charact
 4. **Special Rewards** gives gifts to chosen active accounts or draws one eligible account. Review recipients and contents before applying. Save named reward packages to reuse, edit, duplicate, or make inactive.
 5. **Worlds & Levels** clears one saved course or corrects a stage’s completion. **Progress & Reports** can reopen a specific Reading Detective mission. **Study & Homework** can assign or archive an existing pack and opens the Homework Workshop for case review and publication.
 6. **Backups & Recovery** exports private progress for one explorer or all explorers. A stored server revision can restore selected gameplay and study records. Current wallets, pet collections, Reading Detective records, and reward ledgers are retained. Export files contain private player data and belong outside the repository.
-7. **Players** supports account rename, PIN reset, session revocation, disable/re-enable, and recovery credential replacement. Save a rotated recovery link privately. Treat it as a password.
+7. **Players** supports account rename, PIN reset, session revocation, disable/re-enable, and recovery credential replacement. Download the replacement recovery passport as a PNG and keep it private. The player can upload it from Photos or Files on the Arcade’s recovery screen. Recovering the account replaces the passport. A private recovery link is also available.
 
 The dashboard changes the cloud save. If an explorer is playing during a repair, stop their session first or have them load the updated cloud save before continuing. Revision checks prevent overwriting changes saved after a preview.
 
@@ -25,3 +25,7 @@ npx playwright test --config=playwright.game-master.config.js
 ```
 
 The test uses disposable accounts, a dedicated SQLite database, and synthetic keys. It runs in touch-emulated Chromium and WebKit. It does not use live accounts.
+
+## Set up a local owner
+
+Start the local server with a private `CQ_GAME_MASTER_KEY` in its environment, then create an Explorer through the Arcade. In a second terminal in this checkout, run `npm run admin:designate -- EXPLORER_USERNAME`. The command uses the local maintenance key and calls localhost only. Sign in to that Explorer, open `/admin` and enter the owner key. For a hosted Arcade, keep both owner and maintenance keys in the hosting secret store.

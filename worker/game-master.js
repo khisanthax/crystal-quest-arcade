@@ -1,4 +1,5 @@
 import {ACCESSORIES, FOOD, PETS, collection, petLevel} from '../dist/runner/collection.js';
+import {badgeView,listBadges,playerBadges,saveBadge} from './game-master-badges.js';
 import {exportBackup} from '../dist/runner/store.js';
 import {assignLevel, archiveLevel} from '../dist/runner/levels.js';
 import {STAGES} from '../dist/reading/workflow.js';
@@ -286,6 +287,8 @@ export async function gameMasterAction(body, {db,a,env,fail,response,checkedData
   if (!account) fail(404,'Explorer not found.');
   return account;
  };
+ if (body.action === 'badges') return response(await listBadges(db));
+ if (body.action === 'badge-save') return saveBadge(body,{db,a,env,fail,response,randomToken,signature:gameMasterSignature,requestGate});
  if (body.action === 'packages') {
   const rows = (await db.prepare('SELECT * FROM game_master_packages ORDER BY name').all()).results;
   return response({packages:rows.map(packageView)});
@@ -310,7 +313,11 @@ export async function gameMasterAction(body, {db,a,env,fail,response,checkedData
  }
  if (body.action === 'backup') {
   const players = body.account ? [await requireAccount(body.account)] : await accounts();
-  return response({format:'crystal-quest-game-master-backup-v1',players:players.map(({id,username,revision,payload}) => ({id,username,revision,data:exportBackup(JSON.parse(payload)).data}))});
+  const copies = await Promise.all(players.map(async ({id,username,revision,payload}) => ({
+   id,username,revision,data:exportBackup(JSON.parse(payload)).data,
+   badges:{emberia:await playerBadges(db,id,'emberia'),luminara:await playerBadges(db,id,'luminara')},
+  })));
+  return response({format:'crystal-quest-game-master-backup-v1',players:copies});
  }
  if (body.action === 'audit') {
   const rows = (await db.prepare('SELECT id,request_id AS requestId,actor,account_id AS account,profile,action,reason,previous,updated,created FROM game_master_audit WHERE (? IS NULL OR account_id=?) ORDER BY id DESC LIMIT 200')
@@ -335,6 +342,13 @@ export async function gameMasterAction(body, {db,a,env,fail,response,checkedData
  const prior = await existingRequest();
  if (prior) return replay(prior);
 
+ let selectedBadge;
+ if (change.type === 'badge') {
+  if (typeof change.id !== 'string') fail(400,'Choose an active collectible badge.');
+  const row = await db.prepare('SELECT * FROM game_master_badges WHERE id=? AND active=1').bind(change.id).first();
+  if (!row || row.version !== change.version) fail(409,'This badge changed. Reload and preview it again.');
+  selectedBadge = badgeView(row);
+ }
  let chosenPackage;
  if (change.type === 'reward-package') {
   if (typeof change.id !== 'string') fail(400,'Choose an active reward package.');
@@ -417,17 +431,26 @@ export async function gameMasterAction(body, {db,a,env,fail,response,checkedData
     columns.recovery_expires = recoveryExpiry();
     edit = {previous:{},updated:{recoveryRotated:true}};
    } else fail(400,'Choose an account action.');
+  } else if (selectedBadge) {
+   const alreadyOwned = await db.prepare('SELECT 1 FROM player_badges WHERE account_id=? AND profile=? AND badge_id=?')
+    .bind(account.id,target.profile,selectedBadge.id).first();
+   if (alreadyOwned) {
+    const existing = await existingRequest();
+    if (existing) return replay(existing);
+    fail(409,'A selected profile already owns this badge.');
+   }
+   edit = {previous:{owned:false},updated:{owned:true,badge:selectedBadge}};
   } else edit = await editProfile({db,data,target,change,fail});
   if (draw) edit.updated.randomDraw = draw.nonce;
   if (chosenPackage) edit.updated.package = {id:chosenPackage.id,name:chosenPackage.name,version:chosenPackage.version};
   audits.push({target,edit,action:draw ? 'reward:random' : chosenPackage ? 'reward-package' : change.operation ? change.type+':'+change.operation : change.type});
  }
- for (const r of records.values()) checkedData(r.data);
+ if (!selectedBadge) for (const r of records.values()) checkedData(r.data);
 
  // D1 batches are transactional. The marker makes every write conditional on
  // this exact batch successfully reserving the request against all revisions.
  const marker = randomToken(), now = Date.now();
- const revisions = [...records.values()].map(({account}) => ({account:account.id,revision:account.revision+1}));
+ const revisions = [...records.values()].map(({account}) => ({account:account.id,revision:account.revision+(selectedBadge ? 0 : 1)}));
  const result = {applied:true,revisions};
  const guards = [...records.values()].map(() => 'EXISTS (SELECT 1 FROM explorers WHERE id=? AND revision=?)');
  const snapshots = [...records.values()].flatMap(({account}) => [account.id,account.revision]);
@@ -435,13 +458,25 @@ export async function gameMasterAction(body, {db,a,env,fail,response,checkedData
   guards.push("NOT EXISTS (SELECT 1 FROM game_master_audit WHERE json_extract(updated,'$.randomDraw')=?)");
   snapshots.push(draw.nonce);
  }
+ if (selectedBadge) {
+  guards.push('EXISTS (SELECT 1 FROM game_master_badges WHERE id=? AND version=? AND active=1)');
+  snapshots.push(selectedBadge.id,selectedBadge.version);
+  for (const {target} of audits) {
+   guards.push('NOT EXISTS (SELECT 1 FROM player_badges WHERE account_id=? AND profile=? AND badge_id=?)');
+   snapshots.push(target.account,target.profile,selectedBadge.id);
+  }
+ }
  if (chosenPackage) {
   guards.push('EXISTS (SELECT 1 FROM game_master_packages WHERE id=? AND version=? AND active=1)');
   snapshots.push(chosenPackage.id,chosenPackage.version);
  }
  const batch = [db.prepare('INSERT OR IGNORE INTO game_master_requests (id,actor,fingerprint,marker,result,created) SELECT ?,?,?,?,?,? WHERE '+guards.join(' AND '))
   .bind(requestId,a.id,fingerprint,marker,JSON.stringify(result),now,...snapshots)];
- for (const {account,data,columns,revoke} of records.values()) {
+ if (selectedBadge) for (const {target} of audits) {
+  batch.push(db.prepare('INSERT INTO player_badges (account_id,profile,badge_id,awarded) SELECT ?,?,?,? WHERE '+requestGate)
+   .bind(target.account,target.profile,selectedBadge.id,now,requestId,marker));
+ }
+ if (!selectedBadge) for (const {account,data,columns,revoke} of records.values()) {
   batch.push(db.prepare('INSERT OR IGNORE INTO save_history (account_id,revision,payload,created) SELECT id,revision,payload,? FROM explorers WHERE id=? AND '+requestGate)
    .bind(now,account.id,requestId,marker));
   const extra = Object.keys(columns).map(name => ','+name+'=?').join('');

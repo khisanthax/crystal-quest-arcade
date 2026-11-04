@@ -9,6 +9,7 @@ Use Node.js 24 or newer.
 ```sh
 npm ci
 npm run check
+npm run lint
 npm test
 npm run build
 npm start

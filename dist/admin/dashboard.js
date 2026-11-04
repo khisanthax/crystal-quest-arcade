@@ -1,3 +1,5 @@
+import {mountBadges} from './badges.js';
+import {createRecoveryPassport} from '/cloud/client.bundle.js?v=passport-1';
 import {esc} from '/runner/parent.js';
 import {WORLDS} from '/runner/worlds.js';
 import {homeworkAdmin} from '/reading/admin.js';
@@ -22,6 +24,28 @@ const state = {
   key: '', section: 'players', selected: null, profile: 'emberia',
   players: [], catalog: {}, detail: null, draft: null, pending: false, load: 0, recovery: null
 };
+
+function clearRecovery() {
+  if (state.recovery?.image) URL.revokeObjectURL(state.recovery.image);
+  state.recovery = null;
+}
+
+async function showRecovery(token) {
+  const selected = player();
+  clearRecovery();
+  state.recovery = {
+    account: selected.id,
+    url: location.origin + '/#cq-recover=' + encodeURIComponent(token),
+    image: null
+  };
+  try {
+    const png = await createRecoveryPassport(token, selected.username);
+    state.recovery.image = URL.createObjectURL(png);
+    return 'Change saved. Download the new private recovery passport.';
+  } catch {
+    return 'Change saved. The PNG could not be created. Save the private recovery link instead.';
+  }
+}
 
 function message(text, error = false) {
   $('status').textContent = text;
@@ -112,10 +136,16 @@ function accountPanel(p) {
     ${card('Stage', Number.isInteger(info.stage) ? info.stage + 1 : 'None')}</div>
     ${actionForm('account', select('Account action', 'operation', choices) +
       field('New username', 'value', 'required maxlength="20" autocomplete="off"'))}
-    ${state.recovery?.account === p.id ? `<div class="review"><h3>New private recovery link</h3>
-      <p>Save this link securely before leaving this screen. It can be used once.</p>
-      <label>Recovery link<input readonly value="${esc(state.recovery.url)}"></label>
-      <button data-action="hide-recovery">Hide recovery link</button></div>` : ''}`);
+    ${state.recovery?.account === p.id ? `<div class="review"><h3>New private recovery passport</h3>
+      <p>Save this passport securely before leaving this screen. It can be used once.</p>
+      <div class="actions">
+        ${state.recovery.image ? `<a class="button primary" href="${esc(state.recovery.image)}"
+          download="private-explorer-${esc(p.username)}-passport.png">Download recovery QR PNG</a>` : ''}
+        <button data-action="hide-recovery">Close passport</button>
+      </div>
+      <details><summary>Use a private link instead</summary>
+        <label>Recovery link<input readonly value="${esc(state.recovery.url)}"></label>
+      </details></div>` : ''}`);
 }
 
 function crystalPanel() {
@@ -185,7 +215,10 @@ async function rewardPanel(token) {
       <button data-action="duplicate-package" disabled>Duplicate package</button></div>
     ${actionForm('package-save', field('Package name', 'name', 'required maxlength="70"') +
       '<label class="check"><input name="active" type="checkbox" checked> Available to award</label>' +
-      rewardItems(), 'Preview package changes')}`);
+      rewardItems(), 'Preview package changes')}
+    <section id="badge-host" class="section-gap"><h3>Collectible badges</h3><p data-badge-status>Loading badges…</p></section>`);
+  await mountBadges({host:$('badge-host'),request,players:state.players,selected:state.selected,
+    profile:state.profile,refresh:refreshPlayers,message});
 }
 
 function editPackage(id, duplicate = false) {
@@ -277,7 +310,7 @@ const auditLabels = {
   'stage-status': 'Stage completion changed', 'mission-reset': 'Reading mission reopened',
   'study-pack:assign': 'Study pack assigned', 'study-pack:archive': 'Study pack archived',
   restore: 'Profile progress restored', 'reward:random': 'Surprise gift awarded',
-  'reward-package': 'Reward package awarded', 'package:save': 'Reward package saved'
+  'reward-package': 'Reward package awarded', 'package:save': 'Reward package saved', badge: 'Collectible badge awarded', 'badge:save': 'Collectible badge saved'
 };
 
 function auditDetail(entry) {
@@ -292,6 +325,7 @@ function auditDetail(entry) {
   if (after.username) changes.push(after.username);
   if (after.randomDraw) changes.push('Recipient selected by draw');
   if (after.package?.name) changes.push(after.package.name);
+  if (after.badge?.name) changes.push(after.badge.name);
   if (after.reversalOf) changes.push('Reverses adjustment ' + after.reversalOf);
   return changes.join(' · ');
 }
@@ -518,11 +552,14 @@ async function confirmChange(button) {
   $('review-error').hidden = true;
   try {
     const result = await request(state.draft.action, state.draft.body);
-    if (result.recovery) state.recovery = {
-      account: state.selected, url: location.origin + '/#cq-recover=' + encodeURIComponent(result.recovery)
-    };
+    const isRotation = state.draft.body.change?.operation === 'rotate-recovery';
+    let outcome = 'Change saved.';
+    if (result.recovery) outcome = await showRecovery(result.recovery);
+    else if (isRotation && result.duplicate) {
+      outcome = 'The passport was replaced. If you missed the download, create a new passport.';
+    }
     state.draft = null;
-    message('Change saved.');
+    message(outcome);
     try {
       await refreshPlayers();
     } catch {
@@ -610,7 +647,7 @@ $('lock').addEventListener('click', async () => {
   $('search').value = '';
   state.detail = null;
   state.draft = null;
-  state.recovery = null;
+  clearRecovery();
   $('dashboard').hidden = true;
   $('work').replaceChildren();
   $('player-list').replaceChildren();
@@ -631,7 +668,7 @@ $('dashboard').addEventListener('click', async event => {
   if (!button || state.pending) return;
   const {account, section, action} = button.dataset;
   if (account || section) {
-    state.recovery = null;
+    clearRecovery();
     if (account) state.selected = account;
     if (section) state.section = section;
     $('work').classList.remove('workshop');
@@ -658,7 +695,7 @@ $('dashboard').addEventListener('click', async event => {
       case 'duplicate-package': return editPackage($('work').querySelector('[name="edit-package"]').value, true);
       case 'all': return chooseRecipients(button, false);
       case 'workshop': return showWorkshop();
-      case 'hide-recovery': state.recovery = null; return await render();
+      case 'hide-recovery': clearRecovery(); return await render();
       case 'backup-one':
       case 'backup-all': {
         button.disabled = true;
@@ -686,7 +723,7 @@ $('work').addEventListener('change', async event => {
     input.form.elements.stage.innerHTML = options(WORLDS[input.value].stages.map((name, index) => [index, name]));
   }
   if (input.name === 'profile' && profiles[input.value]) {
-    state.recovery = null;
+    clearRecovery();
     state.profile = input.value;
     message('');
     await render();

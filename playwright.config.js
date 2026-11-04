@@ -14,6 +14,8 @@ export default defineConfig({
     viewport: {width: 1180, height: 820},
     hasTouch: true,
     deviceScaleFactor: 1,
+    actionTimeout: 15000,
+    navigationTimeout: 30000,
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
   },

@@ -29,6 +29,13 @@
       "when": 1793700000003,
       "tag": "0003_game_master",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1793700000004,
+      "tag": "0004_collectible_badges",
+      "breakpoints": true
     }
   ]
 }

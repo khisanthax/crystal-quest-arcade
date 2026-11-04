@@ -13,7 +13,7 @@ test('owner dashboard protects data and applies reviewed gifts and adjustments o
   const accounts = [];
   async function signup(ctx, role) {
     const username = 'qa_gm_' + role.slice(0,1) + '_' + Date.now().toString(36);
-    const result = await post(ctx, 'signup', {username, pin: '5682'});
+    const result = await post(ctx, 'signup', {username, pin: '5682'}, {'CF-Connecting-IP':'203.0.113.'+(test.info().workerIndex+1)});
     expect(result.ok(), await result.text()).toBe(true);
     const account = (await result.json()).account;
     accounts.push(account);
@@ -132,6 +132,42 @@ test('owner dashboard protects data and applies reviewed gifts and adjustments o
     await expect(page.getByRole('button', {name: /Backups & Recovery/})).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await page.screenshot({path: test.info().outputPath('game-master-1024.png')});
+    const savedWallet = await checkBalance();
+    await page.getByRole('button', {name: /Players/}).tap();
+    const accountForm = page.locator('form[data-change="account"]');
+    await accountForm.locator('select[name=operation]').selectOption('rotate-recovery');
+    await commit(accountForm, 'Replace lost recovery passport');
+    const recoveryDownload = page.waitForEvent('download');
+    await page.getByRole('link', {name: 'Download recovery QR PNG'}).tap();
+    const recoveredFile = await recoveryDownload;
+    const recoveryImage = await readFile(await recoveredFile.path());
+    expect(recoveryImage.subarray(0, 8).toString('hex')).toBe('89504e470d0a1a0a');
+
+    const recoveryContext = await browser.newContext({baseURL, hasTouch: true, viewport: {width: 1024, height: 768}});
+    try {
+      const recoveryPage = await recoveryContext.newPage();
+      const selectPassport = async () => {
+        await recoveryPage.goto('/');
+        await recoveryPage.locator('#explorer-home').tap();
+        await recoveryPage.locator('#explorer-recover').tap();
+        await recoveryPage.locator('#passport-file').setInputFiles({
+          name: 'private-explorer-passport.png', mimeType: 'image/png', buffer: recoveryImage
+        });
+      };
+      await selectPassport();
+      await expect(recoveryPage.locator('#passport-image')).toBeVisible();
+      await recoveryPage.locator('#passport-done').tap();
+      const recovered = await (await recoveryContext.request.get('/api/me')).json();
+      expect(recovered.account.id).toBe(learner.id);
+      expect(recovered.data.profiles.ari.collection.wallet).toBe(savedWallet);
+      expect(recovered.data.profiles.ari.collection.pets[0].species).toBe('dragon');
+      await recoveryPage.locator('#explorer-home').tap();
+      await recoveryPage.locator('#sign-out').tap();
+      await selectPassport();
+      await expect(recoveryPage.locator('#recovery-message')).toContainText('replaced');
+    } finally {
+      await recoveryContext.close();
+    }
     await page.getByRole('button', {name: 'Lock dashboard'}).tap();
     await expect(page.getByRole('button', {name: 'Unlock dashboard'})).toBeVisible();
   } finally {
