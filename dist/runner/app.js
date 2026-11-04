@@ -102,4 +102,7 @@ Object.defineProperty(window,'crystalQuest',{get:()=>structuredClone({mode:appMo
 
 const detective=readingUI({getData:()=>data,getProfile:()=>profile,save,screen,on,back:()=>playerMenu(),notice,speak});
 cloud=cloudAccounts({getData:()=>data,replaceData:d=>{run=null;practicePending=null;profile=null;data=d;home();},beforeSwitch:async()=>{stash();run=null;practicePending=null;if(classicFrame)await closeOriginal();},screen,on,back:home,notice});
-home();save();cloud.boot();frameId=requestAnimationFrame(frame);if('serviceWorker'in navigator)navigator.serviceWorker.register('./sw.js').catch(()=>{});
+screen('<section class="panel" role="status"><h2>Getting your adventures ready…</h2></section>','boot');
+save();
+void cloud.boot().finally(()=>{if(appMode==='boot')home();});
+frameId=requestAnimationFrame(frame);if('serviceWorker'in navigator)navigator.serviceWorker.register('./sw.js').catch(()=>{});
