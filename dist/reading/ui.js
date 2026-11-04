@@ -28,8 +28,9 @@ function render(){
  let content='',action='',handler=null;
  if(st===STAGES.KEYWORDS||st===STAGES.KEYWORD_FEEDBACK){content=keywordPanel(q);action=primary('CHECK MY KEYWORDS');handler=validateKeywords;}
  else if(readingStages.has(st)){content=passagePanel(q,a);const partial=st===STAGES.EVIDENCE_FEEDBACK&&m.verdict;
-  action=primary(st===STAGES.CLUES?'DONE FINDING CLUES':st===STAGES.READY?'YES, I FOUND IT!':partial?'KEEP INVESTIGATING':'CHECK MY EVIDENCE',st===STAGES.SELECT&&!m.selection);
+  action=primary(st===STAGES.CLUES?'DONE FINDING CLUES':st===STAGES.READY?'YES, I FOUND IT!':partial?'KEEP INVESTIGATING':'CHECK MY EVIDENCE');
   if(st===STAGES.READY)action+='<button class="story-nav" id="keep-looking">No, keep looking</button>';
+  action+=`<p id="evidence-feedback" role="status">${esc(m.feedback||'')}</p>`;
   handler=st===STAGES.CLUES?()=>{m.feedback=visibleClues(m,a.id).length?'Clue notes saved.':'';stage(STAGES.SELECT);}:st===STAGES.READY?foundAnswer:partial?()=>stage(STAGES.CLUES):verifyEvidence;
  }
  else if(st===STAGES.MAIN_IDEA){
@@ -80,7 +81,7 @@ async function validateKeywords(){
 function illustration(a){const v=typeof a.illustration==='string'?a.illustration:a.illustration?.kind;if(!['forest','garden','space','ocean'].includes(v))return '';return `<svg class="reading-illustration" viewBox="0 0 180 110" role="img" aria-label="${esc(a.illustration?.alt||v+' illustration')}"><rect width="180" height="110" rx="13" fill="${v==='space'?'#25344f':v==='ocean'?'#83c9d7':'#b2d6ba'}"/>${v==='forest'||v==='garden'?'<path d="M0 100q90-45 180 0v10H0" fill="#608e61"/><path d="M32 95V40m72 50V30m44 70V46" stroke="#8c6747" stroke-width="9"/><g fill="#4c9b6b"><circle cx="32" cy="32" r="25"/><circle cx="104" cy="25" r="28"/><circle cx="148" cy="40" r="23"/></g>':v==='space'?'<g fill="#ffe9a1"><circle cx="23" cy="20" r="2"/><circle cx="146" cy="70" r="3"/><circle cx="60" cy="89" r="2"/></g><circle cx="100" cy="45" r="28" fill="#b0a1da"/><ellipse cx="100" cy="45" rx="46" ry="9" fill="none" stroke="#e6c997" stroke-width="6"/>':'<path d="M20 110V70m0 15-10-10m10 17 15-18m115 36V60m0 20-13-14m13 27 18-13" stroke="#e6a7ab" fill="none" stroke-width="9"/><g fill="#f9d18d"><ellipse cx="75" cy="40" rx="22" ry="11"/><path d="M53 40l-13-13v26z"/></g><circle cx="84" cy="38" r="2" fill="#314c58"/>'}</svg>`;}
 
 function passagePanel(q,a){if(s.workflowStage===STAGES.READY&&current().reviewSaved)return `<h3>Your verified clues</h3>${quotedEvidence(q)}<h2>Did you find your answer?</h2>`;if(!s.visited.includes(a.id))s.visited.push(a.id);const m=current(),selecting=[STAGES.SELECT,STAGES.EVIDENCE_FEEDBACK].includes(s.workflowStage)&&!(s.workflowStage===STAGES.EVIDENCE_FEEDBACK&&m.verdict),ss=sentences(a.text),spans=evidenceSegments(s,q.id);
- return `<div class="passage-heading"><p class="case-eyebrow">Paragraph ${s.paragraph+1} of ${pack.paragraphs.length}</p></div><h2 class="reading-instruction">${s.workflowStage===STAGES.READY?'Did you find your answer?':selecting?'Highlight the sentence that helps answer your question.':'Clue Mode'}</h2>${s.workflowStage===STAGES.CLUES?'<p class="reading-instruction">Tap words that might help answer your question.</p>':''}<nav class="story-buttons" aria-label="Paragraph navigation"><button id="previous-paragraph" ${s.paragraph?'':'disabled'}>⬅ Previous Paragraph</button><button id="next-paragraph">${s.paragraph===pack.paragraphs.length-1?'📖 Review Story':'Next Paragraph ➜'}</button><button id="full-source">📖 Whole Story</button><button id="open-notebook">📓 Look at My Clues</button></nav>${illustration(a)}<div id="passage-scroll" class="passage-scroll ${selecting?'select-evidence':''}" aria-label="Reading passage">${ss.map((sentence,i)=>{const pending=!m.selectionChecked&&m.selection?.paragraphId===a.id&&m.selection.start<sentence.end&&m.selection.end>sentence.start,green=!pending&&spans.some(e=>e.paragraphId===a.id&&e.start<=sentence.start&&e.end>=sentence.end);return `<span data-sentence="${i}" ${selecting&&!m.shortSpan?`tabindex="0" role="button" aria-pressed="${pending}"`: ''} class="passage-sentence ${pending&&!m.shortSpan?'pending':''} ${green?'verified current-verified':''}">${spanWords(a,sentence,selecting,m)}</span> `;}).join('')}</div><p id="evidence-feedback" role="status">${esc(m.feedback||'')}</p><nav class="guided-secondary"><button id="reading-hint">💡 Help</button>${s.evidence[q.id]&&s.workflowStage!==STAGES.READY?'<button id="review-evidence">Review saved clues</button>':''}${selecting?`<button id="clear-evidence">Clear selection</button><button id="span-mode" aria-pressed="${!!m.shortSpan}">${m.shortSpan?'Use whole sentences':'Select a short span'}</button>`:''}</nav>`;
+ return `<div class="passage-heading"><p class="case-eyebrow">Paragraph ${s.paragraph+1} of ${pack.paragraphs.length}</p></div><h2 class="reading-instruction">${s.workflowStage===STAGES.READY?'Did you find your answer?':selecting?'Highlight the sentence that helps answer your question.':'Clue Mode'}</h2>${s.workflowStage===STAGES.CLUES?'<p class="reading-instruction">Tap words that might help answer your question.</p>':''}<nav class="story-buttons" aria-label="Paragraph navigation"><button id="previous-paragraph" ${s.paragraph?'':'disabled'}>⬅ Previous Paragraph</button><button id="next-paragraph">${s.paragraph===pack.paragraphs.length-1?'📖 Review Story':'Next Paragraph ➜'}</button><button id="full-source">📖 Whole Story</button><button id="open-notebook">📓 Look at My Clues</button></nav>${illustration(a)}<div id="passage-scroll" class="passage-scroll ${selecting?'select-evidence':''}" aria-label="Reading passage">${ss.map((sentence,i)=>{const pending=!m.selectionChecked&&m.selection?.paragraphId===a.id&&m.selection.start<sentence.end&&m.selection.end>sentence.start,green=!pending&&spans.some(e=>e.paragraphId===a.id&&e.start<=sentence.start&&e.end>=sentence.end);return `<span data-sentence="${i}" ${selecting&&!m.shortSpan?`tabindex="0" role="button" aria-pressed="${pending}"`: ''} class="passage-sentence ${pending&&!m.shortSpan?'pending':''} ${green?'verified current-verified':''}">${spanWords(a,sentence,selecting,m)}</span> `;}).join('')}</div><nav class="guided-secondary"><button id="reading-hint">💡 Help</button>${s.evidence[q.id]&&s.workflowStage!==STAGES.READY?'<button id="review-evidence">Review saved clues</button>':''}${selecting?`<button id="clear-evidence">Clear selection</button><button id="span-mode" aria-pressed="${!!m.shortSpan}">${m.shortSpan?'Use whole sentences':'Select a short span'}</button>`:''}</nav>`;
 }
 function allClues(id){return [...new Set([...(s.clues[id]||[]),...Object.values(s.missions).flatMap(m=>m.clues?.[id]||[])])];}
 function visibleClues(m,id){return allClues(id).filter(n=>!(m.hiddenClues?.[id]||[]).includes(n));}
@@ -110,8 +111,8 @@ function bindPassage(q,a){const m=current();document.querySelectorAll('[data-clu
    node.classList.toggle('verified',green);
    if(sentence)node.classList.toggle('current-verified',green);
   }
-  $('guided-primary').disabled=false;
   $('guided-primary').textContent='CHECK MY EVIDENCE';
+  $('evidence-feedback').textContent='Evidence selected. Tap Check My Evidence when you’re ready.';
   save();
  };
  region.addEventListener('pointerdown',e=>{
@@ -144,8 +145,18 @@ function bindPassage(q,a){const m=current();document.querySelectorAll('[data-clu
 
 }
 async function gradeRemote(kind,args){const root=document.querySelector('.guided'),selection=current().selection;if(root.dataset.checking)return null;root.dataset.checking='true';try{const r=await readingRequest('check',{id:pack.id,profile:getProfile(),question:qNow().id,kind,...args});return root.isConnected&&(kind!=='evidence'||selection===current().selection)?r:null;}catch(e){if(root.isConnected){current().feedback=e.message;render();}return null;}finally{delete root.dataset.checking;}}
-async function verifyEvidence(){const q=qNow(),m=current();if(!m.selection)return;const selection={...m.selection},was=!!s.evidence[q.id];let r;
- if(pack.published){r=await gradeRemote('evidence',{selection,claims:s.evidenceClaims?.[q.id]||[]});if(!r)return;if(r.correct){s.evidenceClaims??={};const claims=s.evidenceClaims[q.id]??=[];if(!claims.some(e=>e.paragraphId===selection.paragraphId&&e.start===selection.start&&e.end===selection.end))claims.push(selection);if(r.complete&&!was)s.evidence[q.id]={...selection,segments:r.segments,independent:!(s.hints[q.id]||s.checks.some(c=>c.question===q.id&&!c.correct))};}}
+async function verifyEvidence(){
+ const q=qNow(),m=current(),feedback=$('evidence-feedback'),button=$('guided-primary');
+ if(m.selection?.paragraphId!==paragraph().id){feedback.textContent=m.shortSpan?'Tap the first and last words you want to highlight.':'Tap a sentence to highlight it. For two sentences, tap the first and then the second.';return;}
+ const selection={...m.selection},was=!!s.evidence[q.id];let r;
+ if(pack.published){
+  button.disabled=true;
+  feedback.textContent='Checking your evidence…';
+  try{r=await gradeRemote('evidence',{selection,claims:s.evidenceClaims?.[q.id]||[]});}
+  finally{button.disabled=false;}
+  if(!r)return;
+  if(r.correct){s.evidenceClaims??={};const claims=s.evidenceClaims[q.id]??=[];if(!claims.some(e=>e.paragraphId===selection.paragraphId&&e.start===selection.start&&e.end===selection.end))claims.push(selection);if(r.complete&&!was)s.evidence[q.id]={...selection,segments:r.segments,independent:!(s.hints[q.id]||s.checks.some(c=>c.question===q.id&&!c.correct))};}
+ }
  else{const match=checkEvidence(pack,q,selection);r=match?claimEvidence(pack,q,s,selection):{correct:false};}
  s.checks.push({question:q.id,...selection,correct:r.correct,at:new Date().toISOString(),hints:s.hints[q.id]||0});m.verdict=r.correct;m.selectionChecked=r.correct;
  if(!r.correct){m.feedback='Keep it yellow. Does this explain what your question asks? Revise your selection or ask for help.';stage(STAGES.EVIDENCE_FEEDBACK);return;}

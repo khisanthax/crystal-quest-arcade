@@ -4,7 +4,8 @@ import {sentences} from './model.js';
 
 export async function readingRequest(action,body={}){
  if(navigator.onLine===false)throw Error('Could not reach the homework service. Check your connection and try again.');
- let res,data;try{res=await fetch('/api/reading-'+action,{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});data=await res.json();}catch{throw Error('Could not reach the homework service. Check your connection and try again.');}if(!res.ok)throw Error(data.error||'The worksheet service is unavailable.');return data;
+ const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),12000);
+ let res,data;try{res=await fetch('/api/reading-'+action,{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal:controller.signal});data=await res.json();}catch{throw Error('Could not reach the homework service. Check your connection and try again.');}finally{clearTimeout(timeout);}if(!res.ok)throw Error(data.error||'The worksheet service is unavailable.');return data;
 }
 export async function openAdmin({screen,on,back,enter}){
  let access;

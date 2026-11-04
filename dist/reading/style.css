@@ -56,5 +56,8 @@
 .guided .whole-story-text{font-size:18px;line-height:1.6}
 
 .guided .guided-action{gap:12px}
+.guided-action:has(#evidence-feedback){flex-wrap:wrap}
+#evidence-feedback{flex:0 0 100%;margin:0;text-align:center;font-size:14px}
+#evidence-feedback:empty{display:none}
 .guided .guided-action .story-nav{min-height:48px;white-space:nowrap}
 .guided .detective-guide h2{font-size:clamp(16px,2.2vw,32px)}
