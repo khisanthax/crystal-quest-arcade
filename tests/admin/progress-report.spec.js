@@ -50,6 +50,7 @@ test('owner report switches identity and test while keeping learning, homework, 
     answerRecord(skyHistory, sky.questions[0], true, 0);
 
     const sample = readingFixture();
+    const totalMissions = sample.questions.length;
     const assigned = assignHomework(data, 'ari', sample);
     const reading = caseState(assigned, sample);
     for (const question of sample.questions) reading.written[question.id] = true;
@@ -81,7 +82,7 @@ test('owner report switches identity and test while keeping learning, homework, 
     await expect(stats).toContainText('50%');
     await expect(page.getByRole('listitem').filter({hasText: term.term || term.definition}))
       .toContainText('1 incorrect attempt');
-    await expect(readingRow).toContainText('5 of 5 written · Completed');
+    await expect(readingRow).toContainText(`${totalMissions} of ${totalMissions} written · Completed`);
     await expect(course).toContainText('Original Adventure 1/3');
     await expect(course).toContainText('144 best points');
 
@@ -89,7 +90,7 @@ test('owner report switches identity and test while keeping learning, homework, 
     await expect(stats).toContainText('100%');
     await expect(page.getByText('No concepts flagged for practice on this test.')).toBeVisible();
     await expect(course).toContainText('No best score yet');
-    await expect(readingRow).toContainText('5 of 5 written · Completed');
+    await expect(readingRow).toContainText(`${totalMissions} of ${totalMissions} written · Completed`);
 
     await page.locator('select[name=profile]').selectOption('luminara');
     await expect(pack).toHaveValue(sky.id);
@@ -104,7 +105,7 @@ test('owner report switches identity and test while keeping learning, homework, 
     await repair.getByRole('button', {name: 'Preview change'}).tap();
     await expect(page.locator('#review')).toContainText('Mission 1');
     await page.getByRole('button', {name: 'Apply confirmed change'}).tap();
-    await expect(readingRow).toContainText('4 of 5 written · In progress');
+    await expect(readingRow).toContainText(`${totalMissions - 1} of ${totalMissions} written · In progress`);
     await page.setViewportSize({width: 1024, height: 768});
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await page.screenshot({path: test.info().outputPath('progress-report-1024.png')});

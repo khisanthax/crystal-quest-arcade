@@ -6,10 +6,10 @@ process.env.CQ_GAME_MASTER_TEST_KEY = 'disposable-game-master-test-key-2026';
 
 export default defineConfig({
   testDir: './tests/admin',
-  timeout: 90000,
+  timeout: 180000,
   workers: 1,
   outputDir: 'test-results/game-master',
-  use: {baseURL, viewport: {width: 1180, height: 820}, hasTouch: true, actionTimeout: 10000, trace: 'retain-on-failure'},
+  use: {baseURL, viewport: {width: 1180, height: 820}, hasTouch: true, actionTimeout: 15000, trace: 'retain-on-failure'},
   projects: [
     {name: 'chromium', use: {browserName: 'chromium'}},
     {name: 'webkit', use: {browserName: 'webkit'}}

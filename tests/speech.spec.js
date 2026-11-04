@@ -19,7 +19,7 @@ async function setup(page,world,concept,available=true,run=null){
  await f.locator(run?'#play':world==='ari'?'#practice':'#mistakes').tap();return f;
 }
 
-for(const world of ['ari','kal'])test(world+' mistake questions have a tappable Speak Aloud button that reads the prompt and choices',async({page},info)=>{
+for(const [world,label] of [['ari','Emberia'],['kal','Luminara']])test(label+' mistake questions have a tappable Speak Aloud button that reads the prompt and choices',async({page},info)=>{
  await page.setViewportSize({width:1024,height:768});
  const f=await setup(page,world,world==='ari'?'fossil':'moonMaterial');
  const spoken=()=>f.evaluate(()=>window.spoken);
@@ -30,7 +30,7 @@ for(const world of ['ari','kal'])test(world+' mistake questions have a tappable 
  for(const choice of await f.locator(world==='ari'?'[data-answer]':'[data-choice] span').allTextContents())expect(reading).toContain(choice);
  expect(await f.evaluate(w=>w==='ari'?window.volcanoQuest.progress:window.starQuest.progress,world)).toEqual(before);
  await f.locator('#read-question').tap();expect((await spoken()).length).toBe(2);
- await mkdir('artifacts',{recursive:true});await page.screenshot({path:`artifacts/mistake-speech-${world}-${info.project.name}.png`});
+ await mkdir('artifacts',{recursive:true});await page.screenshot({path:`artifacts/mistake-speech-${label.toLowerCase()}-${info.project.name}.png`});
  await page.locator('#back-arcade').tap();await expect(page.locator('#picker')).toBeVisible();await expect(page.locator('iframe')).toHaveCount(0);
 });
 
