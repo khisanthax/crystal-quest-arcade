@@ -1,4 +1,4 @@
-import {keywordStep,proveQuestion,paperMission} from './reading/guided-browser.mjs';
+import {answerMainIdea,keywordStep,mainIdeaHeading,proveQuestion,paperMission} from './reading/guided-browser.mjs';
 import {test,expect} from '@playwright/test';
 import {freshData,KEY} from '../dist/runner/store.js';import {assignHomework} from '../dist/reading/model.js';import {readingFixture} from './reading/fixture.mjs';import {adopt} from '../dist/runner/collection.js';
 test('camera permission is requested only by Scan; denial keeps same-device PNG recovery available',async({page})=>{await page.addInitScript(()=>{window.cameraRequests=0;Object.defineProperty(navigator,'mediaDevices',{value:{getUserMedia:async()=>{window.cameraRequests++;throw new DOMException('Denied','NotAllowedError');}},configurable:true});});await page.goto('/');await page.locator('#explorer-home').tap();await page.locator('#explorer-recover').tap();expect(await page.evaluate(()=>window.cameraRequests)).toBe(0);await page.locator('#camera-passport').tap();await expect(page.locator('#recovery-message')).toContainText('Photos or Files');expect(await page.evaluate(()=>window.cameraRequests)).toBe(1);await expect(page.locator('#choose-passport')).toBeVisible();});
@@ -10,10 +10,10 @@ async function continueCase(page){
  await page.locator('#reading-play').tap();
  await page.locator('#continue-case').tap();
 }
-async function seed(page){
+async function seed(page,pack=readingFixture()){
  const d=freshData();
  adopt(d.profiles.ari,'fox',true);
- assignHomework(d,'ari',readingFixture());
+ assignHomework(d,'ari',pack);
  await page.addInitScript(({d,KEY})=>{
   if(!localStorage.getItem(KEY))localStorage.setItem(KEY,JSON.stringify(d));
  },{d,KEY});
@@ -21,9 +21,66 @@ async function seed(page){
  await continueCase(page);
 }
 test('three illustrated modes and the empty case library fit iPad landscape without fabricated homework',async({page},info)=>{await page.goto('/');for(const id of ['ari','kal']){await page.locator('#choose-'+id).tap();await expect(page.locator('.mode-card')).toHaveCount(3);for(const size of [{width:1024,height:768},{width:1194,height:834},{width:844,height:390}]){await page.setViewportSize(size);for(const selector of ['#new-run','#original-play','#reading-play']){const b=await page.locator(selector).boundingBox();expect(b.height).toBeGreaterThanOrEqual(44);expect(b.y+b.height).toBeLessThanOrEqual(size.height+1);}await page.screenshot({path:info.outputPath(`reading-modes-${id==='ari'?'emberia':'luminara'}-${size.width}-${info.project.name}.png`)});}await page.locator('#reading-play').tap();await expect(page.locator('.case-empty')).toContainText('No homework has been invented');await page.locator('#reading-back').tap();await page.locator('#home').tap();}});
+test('paragraph navigation never asks a quiz, and confirming evidence asks about its primary paragraph',async({page})=>{
+ const pack=readingFixture(),q=pack.questions[0];
+ q.evidence.push(pack.questions[2].evidence[0]);
+ q.evidenceGroups=[[0,1]];
+ await seed(page,pack);
+ await keywordStep(page,q);
+ const progress=async()=>(await state(page)).data.profiles.ari.homework.cases[pack.id][0];
+ const navigateByButton=async(button,number)=>{
+  await page.locator(button).tap();
+  await expect(page.locator('.passage-heading')).toContainText(`Paragraph ${number} of 3`);
+  await expect(mainIdeaHeading(page)).toHaveCount(0);
+ };
+ await navigateByButton('#next-paragraph',2);
+ await navigateByButton('#next-paragraph',3);
+ await navigateByButton('#previous-paragraph',2);
+ await navigateByButton('#next-paragraph',3);
+ await page.locator('#next-paragraph').tap();
+ await expect(page.getByRole('heading',{name:'Whole Story'})).toBeVisible();
+ await expect(mainIdeaHeading(page)).toHaveCount(0);
+ expect((await progress()).mainIdeas).toEqual({});
+
+ await page.locator('[data-paragraph="0"]').tap();
+ await proveQuestion(page,pack,q);
+ const evidence=(await progress()).evidence[q.id];
+ const rewardBefore=await wallet(page);
+ await page.locator('#keep-looking').tap();
+ await expect(primary(page)).toHaveText('DONE FINDING CLUES');
+ await expect(page.locator('.passage-heading')).toContainText('Paragraph 2');
+ await expect(page.locator('.current-verified')).toBeVisible();
+ await expect(mainIdeaHeading(page)).toHaveCount(0);
+ await navigateByButton('#next-paragraph',3);
+ await page.locator('#review-evidence').tap();
+ await expect(primary(page)).toHaveText('YES, I FOUND IT!');
+ await primary(page).tap();
+ await expect(mainIdeaHeading(page)).toBeVisible();
+ await page.locator('#guided-back').tap();
+ await expect(primary(page)).toHaveText('YES, I FOUND IT!');
+ expect((await progress()).paragraph).toBe(2);
+ expect((await progress()).evidence[q.id]).toEqual(evidence);
+ expect(await wallet(page)).toBe(rewardBefore);
+
+ await primary(page).tap();
+ await expect(mainIdeaHeading(page)).toBeVisible();
+ await page.reload();
+ await continueCase(page);
+ await answerMainIdea(page,pack.paragraphs[0].mainIdea);
+ await expect(primary(page)).toHaveText('I WROTE MY ANSWER');
+ await expect(page.locator('.paper-evidence blockquote')).toHaveCount(2);
+ const saved=await progress();
+ expect(saved.paragraph).toBe(2);
+ expect(saved.evidence[q.id]).toEqual(evidence);
+ expect(Object.keys(saved.mainIdeas)).toEqual(['p1']);
+ expect(saved.written[q.id]).toBeUndefined();
+ expect(Number((await wallet(page)).match(/\d+/)[0])).toBe(Number(rewardBefore.match(/\d+/)[0])+2);
+});
+
 test('seven fictional missions preserve retries, optional keywords, evidence, pets and paper progress',async({page},info)=>{
  const pack=readingFixture();
  await seed(page);
+ const checkedParagraphs=new Set();
  for(const q of pack.questions){
   if(q.id==='q2'){
    await expect(page.locator('[data-keyword][aria-pressed=true]')).toHaveCount(0);
@@ -43,11 +100,8 @@ test('seven fictional missions preserve retries, optional keywords, evidence, pe
   }
   if(q.id==='q3'){
    await page.locator('#next-paragraph').tap();
-   await expect(page.getByRole('heading',{name:'What was this paragraph mostly about?'})).toBeVisible();
-   await page.locator('[data-main-idea="1"]').tap();
-   await expect(page.locator('.guided-scroll')).toContainText('whole paragraph');
-   await page.locator('[data-main-idea="0"]').tap();
    await expect(page.locator('.passage-heading')).toContainText('Paragraph 2');
+   await expect(mainIdeaHeading(page)).toHaveCount(0);
    await page.locator('#previous-paragraph').tap();
    await page.locator('#next-paragraph').tap();
    await expect(page.locator('.passage-heading')).toContainText('Paragraph 2');
@@ -70,7 +124,13 @@ test('seven fictional missions preserve retries, optional keywords, evidence, pe
    await proveQuestion(page,pack,q);
    expect(await wallet(page)).toBe(before);
   }
-  await paperMission(page,q,q.id==='q7');
+  const paragraph=pack.paragraphs.find(p=>p.id===q.evidence[0].paragraphId);
+  await paperMission(page,q,{
+   mainIdea:checkedParagraphs.has(paragraph.id)?null:paragraph.mainIdea,
+   wrong:q.id==='q7',
+   wrongMainIdea:q.id==='q3',
+  });
+  checkedParagraphs.add(paragraph.id);
  }
 
  await expect(page.getByRole('heading',{name:'Case closed!'})).toBeVisible();

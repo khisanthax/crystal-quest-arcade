@@ -35,7 +35,30 @@ function speak(text){if(!data.narration){notice('Voice is off. Tap VOICE to turn
 function notice(text){$('notice').textContent=text;$('notice').classList.add('visible');noticeTime=performance.now()+4500;}
 function screen(html,mode){appMode=mode;controls.clear();cancelVoice();noticeTime=0;$('notice').classList.remove('visible');overlay.innerHTML=html;overlay.hidden=false;$('controls').hidden=true;$('hud').hidden=true;}
 function stash(){if(run){if(run.mode==='running')run.mode='paused';syncRun();}}
-function home(){stash();run=null;practicePending=null;profile=null;preview.pet=null;preview.theme='volcano';screen(`<section class="home"><div class="hero-title"><p class="eyebrow">RUN • DISCOVER • GROW</p><h1>CRYSTAL QUEST<br><span>ARCADE</span></h1><p>Who’s playing today?</p></div><div class="players">${Object.entries(PROFILES).map(([id,p])=>`<section class="player-card ${p.theme==='cosmic'?'cosmic':''}"><span class="emblem">${id==='ari'?'🌋':'✦'}</span><h2>${p.name}</h2><strong>Choose your next adventure</strong><p>Run. Explore. Solve reading mysteries.</p><button class="primary" id="choose-${id}">PLAY ➜</button></section>`).join('')}</div><div class="row"><button id="explorer-home">👤 MY EXPLORER</button><button id="parent-settings">PARENT SETTINGS</button><button class="quiet" id="how">HOW TO PLAY</button><button id="arcade-store">CRYSTAL STORE</button><a href="./classic.html">Original platform adventures</a></div>${webglUnavailable?'<p class="error">3D graphics are unavailable in this browser. Try Safari with WebGL enabled, or open the original adventures above.</p>':''}</section>`,'home');for(const id of ['ari','kal'])on('choose-'+id,()=>playerMenu(id));on('explorer-home',()=>cloud.show());on('parent-settings',parentGate);on('how',help);on('arcade-store',()=>{screen(`<section class="panel"><h2>Whose collection?</h2><div class="row">${Object.entries(PROFILES).map(([id,p])=>`<button data-store-profile="${id}">${p.name} · ◆ ${collection(data.profiles[id]).wallet}</button>`).join('')}</div><button id="home">ARCADE</button></section>`,'store-choice');on('home',home);document.querySelectorAll('[data-store-profile]').forEach(b=>b.onclick=()=>{profile=b.dataset.storeProfile;shops.store();});});}
+function explorerHome(){
+ const account=cloud?.active;
+ return `<section class="explorer-home" aria-labelledby="explorer-home-title">
+  <h2 id="explorer-home-title"><span aria-hidden="true">🧭</span> My Explorer</h2>
+  ${account?`<p id="explorer-home-name">${esc(account.username)}</p>
+  <p id="explorer-home-sync" class="${cloud.displayStatus==='Saved to cloud'?'saved':''}" role="status">${esc(cloud.displayStatus)}</p>
+  <button class="secondary" id="explorer-home">MANAGE MY EXPLORER</button>`:
+  `<p class="explorer-benefit">Save your crystals, pets, and adventures!</p>
+  <button class="primary" id="explorer-home">SIGN IN TO MY EXPLORER</button>
+  <div class="explorer-new"><span>NEW EXPLORER?</span><button class="secondary" id="explorer-home-create">CREATE MY EXPLORER</button></div>
+  <p class="explorer-parent-note">An Explorer account keeps purchases, rewards, and progress saved in the cloud.</p>
+  <p class="explorer-guest-note">Guest progress stays on this device. Create an Explorer to keep it safe!</p>`}
+ </section>`;
+}
+function home(){
+ stash();run=null;practicePending=null;profile=null;preview.pet=null;preview.theme='volcano';
+ screen(`<section class="home"><div class="hero-title"><p class="eyebrow">RUN • DISCOVER • GROW</p><h1>CRYSTAL QUEST<br><span>ARCADE</span></h1><p>Who’s playing today?</p></div>
+ <div class="home-adventures"><div class="players">${Object.entries(PROFILES).map(([id,p])=>`<section class="player-card ${p.theme==='cosmic'?'cosmic':''}"><span class="emblem">${id==='ari'?'🌋':'✦'}</span><h2>${p.name}</h2><strong>Choose your next adventure</strong><p>Run. Explore. Solve reading mysteries.</p><button class="primary" id="choose-${id}">PLAY ➜</button></section>`).join('')}</div>${explorerHome()}</div>
+ <div class="row home-tools"><button id="parent-settings">PARENT SETTINGS</button><button class="quiet" id="how">HOW TO PLAY</button><button id="arcade-store">CRYSTAL STORE</button><a href="./classic.html">Original platform adventures</a></div>
+ <a id="arcade-admin-link" href="/admin"><span aria-hidden="true">⚙</span> Admin</a>${webglUnavailable?'<p class="error">3D graphics are unavailable in this browser. Try Safari with WebGL enabled, or open the original adventures above.</p>':''}</section>`,'home');
+ for(const id of ['ari','kal'])on('choose-'+id,()=>playerMenu(id));
+ on('explorer-home',()=>cloud.show());on('explorer-home-create',()=>cloud.show('create'));
+ on('parent-settings',parentGate);on('how',help);on('arcade-store',()=>{screen(`<section class="panel"><h2>Whose collection?</h2><div class="row">${Object.entries(PROFILES).map(([id,p])=>`<button data-store-profile="${id}">${p.name} · ◆ ${collection(data.profiles[id]).wallet}</button>`).join('')}</div><button id="home">ARCADE</button></section>`,'store-choice');on('home',home);document.querySelectorAll('[data-store-profile]').forEach(b=>b.onclick=()=>{profile=b.dataset.storeProfile;shops.store();});});
+}
 let selectedMode='runner',testReturn=null;
 function migrateOriginal(p,id){if(p.originalLegacyMigrated)return;const old=readPlayer(storage,id),pack=id==='ari'?'earth-science':'patterns-sky',world=id==='ari'?'volcano':'cosmic';if(old?.run){originalCourse(p,id,pack,world,old.run.level,old);for(let i=0;i<old.run.level;i++)completedStage(p,'original',world,i);}else if(old?.lastResult){for(let i=0;i<3;i++)completedStage(p,'original',world,i);}p.originalLegacyMigrated=true;}
 function resumable(p,pack){const valid=c=>c&&c.packId===pack&&THEMES[c.world]&&(c.mode==='runner'?!!stageCourse(p,pack,c.world,c.stage):!!p.originalCourses[stageKey(pack,c.world,c.stage)]&&!p.originalCourses[stageKey(pack,c.world,c.stage)].completed);if(valid(p.lastAdventure))return {...p.lastAdventure};for(const r of Object.values(p.stageCourses).reverse())if(r.packId===pack&&!['stage','victory'].includes(r.mode))return {mode:'runner',world:r.theme,stage:r.stage,packId:pack};for(const m of Object.values(p.originalCourses).reverse())if(m.ledger.packId===pack&&!m.completed)return {mode:'original',world:m.ledger.theme,stage:m.ledger.stage,packId:pack};const r=Object.values(p.stageCourses).reverse().find(r=>r.packId===pack);return r?{mode:'runner',world:r.theme,stage:r.stage,packId:pack}:null;}
@@ -101,7 +124,7 @@ window.addEventListener('pageshow',e=>{if(e.persisted){last=performance.now();co
 Object.defineProperty(window,'crystalQuest',{get:()=>structuredClone({mode:appMode,profile,run,cloudAccount:cloud?.active,cloudStatus:cloud?.status,question:pending(),data,held:controls.held,webgl:!!view.renderer,originalActive:!!classicFrame,renderingRunner:!classicFrame&&!appMode.startsWith('reading')&&appMode!=='accounts',loops:stopped?0:1,petVisual:view.pet?{species:view.pet.userData.species,parts:view.pet.children.length,accessories:run?.pet?.accessories||preview.pet?.accessories||{}}:null,renderStats:view.renderer?{geometries:view.renderer.info.memory.geometries,textures:view.renderer.info.memory.textures,drawCalls:view.renderer.info.render.calls}:null,camera:view.camera?{position:view.camera.position.toArray(),type:view.camera.type}:null})});
 
 const detective=readingUI({getData:()=>data,getProfile:()=>profile,save,screen,on,back:()=>playerMenu(),notice,speak});
-cloud=cloudAccounts({getData:()=>data,replaceData:d=>{run=null;practicePending=null;profile=null;data=d;home();},beforeSwitch:async()=>{stash();run=null;practicePending=null;if(classicFrame)await closeOriginal();},screen,on,back:home,notice});
+cloud=cloudAccounts({getData:()=>data,replaceData:d=>{run=null;practicePending=null;profile=null;data=d;},beforeSwitch:async()=>{stash();run=null;practicePending=null;if(classicFrame)await closeOriginal();},screen,on,back:home,notice});
 screen('<section class="panel" role="status"><h2>Getting your adventures ready…</h2></section>','boot');
 save();
 void cloud.boot().finally(()=>{if(appMode==='boot')home();});

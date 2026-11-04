@@ -1,3 +1,94 @@
 #sync-status{position:fixed;bottom:1px;right:max(12px,env(safe-area-inset-right));font-size:10px;color:#dae9df;background:#18323aee;border-radius:9px;padding:3px 10px;z-index:25;pointer-events:none}.explorer-form{display:grid;gap:16px;max-width:390px;margin:20px auto;text-align:left}.explorer-form input:not([type=checkbox]){display:block;width:100%;min-height:48px;padding:10px 14px;font-size:22px;background:#eff6eb;color:#203a46;border:2px solid #9dcac5;border-radius:12px;user-select:text}.explorer-form .remember{display:flex;align-items:center;gap:10px;font-size:14px}.remember input{width:25px;height:25px}.passport-panel img{width:min(270px,50vw);max-height:48vh;object-fit:contain;border-radius:15px;user-select:auto;-webkit-user-select:auto}.passport-panel p{font-size:14px}.explorer-panel #account-message{color:#ffe1b4}.explorer-panel .menu-grid button{font-size:13px}#recovery-camera{width:min(640px,100%);max-height:45vh;border-radius:20px;margin-top:15px}.mode-top .explorer-menu{width:44px;min-width:44px;padding:5px;font-size:22px;background:#ffffff0c;box-shadow:none}#explorer-home{font-size:13px}
 
 .migration-profiles{display:flex;gap:18px;justify-content:center;flex-wrap:wrap;margin:20px 0}.migration-profiles label{display:flex;align-items:center;gap:10px;padding:12px;background:#ffffff10;border-radius:12px}.migration-profiles input{width:26px;height:26px}
+
+.home-adventures {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(245px, 1fr);
+  gap: clamp(12px, 2vw, 22px);
+  margin: 16px auto;
+}
+.home-adventures .players {
+  gap: inherit;
+  margin: 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.home-adventures .player-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+.home-adventures .player-card h2 { font-size: clamp(26px, 3.3vw, 45px); }
+.home-adventures .player-card strong { font-size: clamp(15px, 2vw, 22px); }
+.home-adventures .player-card button { margin-top: auto; }
+.home-adventures .emblem { opacity: .43; }
+.explorer-home {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 8px;
+  min-width: 0;
+  padding: clamp(14px, 2vw, 24px);
+  border: 1px solid #a7ebd799;
+  border-radius: 24px;
+  background: linear-gradient(145deg, #234d54, #163148);
+  box-shadow: 0 12px 30px #06111d66;
+}
+.explorer-home h2, .explorer-home p { margin: 0; }
+.explorer-home h2 { color: var(--gold); font-size: clamp(23px, 3vw, 36px); }
+.explorer-benefit { font-weight: 800; }
+.explorer-home button { width: 100%; min-height: 46px; padding: 8px 10px; }
+.explorer-new { display: grid; gap: 5px; }
+.explorer-new span { color: var(--mint); font-size: 12px; font-weight: 900; }
+.explorer-parent-note, .explorer-guest-note { font-size: 13px; }
+.explorer-guest-note {
+  padding-top: 7px;
+  border-top: 1px solid #a7ebd755;
+  color: #ffe8a9;
+}
+#explorer-home-name { font-size: clamp(20px, 3vw, 30px); font-weight: 900; overflow-wrap: anywhere; }
+#explorer-home-sync {
+  align-self: flex-start;
+  border-radius: 10px;
+  padding: 7px 10px;
+  background: #102a3b;
+  color: #ffe8a9;
+  font-size: 14px;
+  font-weight: 900;
+}
+#explorer-home-sync.saved { color: #124337; background: #a5eacb; text-transform: uppercase; }
+.home-tools { align-items: center; }
+.home-tools a { display: inline-flex; align-items: center; min-height: 44px; }
+#arcade-admin-link {
+  position: fixed;
+  right: max(12px, env(safe-area-inset-right));
+  bottom: max(22px, env(safe-area-inset-bottom));
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 8px;
+  border-radius: 8px;
+  background: #132b3be6;
+  color: #dae9df;
+  font-size: 13px;
+}
+#arcade-admin-link:focus-visible { outline: 2px solid var(--gold); }
+
+@media (max-height: 500px) {
+  .home .hero-title h1 { font-size: clamp(25px, 4.4vw, 39px); margin-bottom: 4px; }
+  .home .hero-title h1 br { display: none; }
+  .home .hero-title h1 span::before { content: ' '; }
+  .home .hero-title .eyebrow { display: none; }
+  .home .hero-title p { margin-bottom: 5px; font-size: 16px; }
+  .home-adventures { margin: 8px auto; }
+  .explorer-home { gap: 6px; padding: 12px; }
+  .explorer-home p { line-height: 1.25; }
+  .home-tools { font-size: 13px; }
+}
+@media (max-width: 680px) {
+  .home-adventures { grid-template-columns: 1fr; }
+  .home-adventures .player-card button { min-width: min(120px, 100%); }
+}
