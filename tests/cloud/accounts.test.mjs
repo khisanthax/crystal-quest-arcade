@@ -45,6 +45,43 @@ test('the server rejects a second ID for the same homework reward proof',async t
  assert.match(res.data.error,/matching saved learning event/);
 });
 
+test('only one of two devices redeeming the same recovery passport can sign in', async t => {
+ const h=harness(), original=h.jar(), first=h.jar(), second=h.jar();
+ t.after(()=>h.DB.close());
+ const account=await h.signup(original);
+ const results=await Promise.all([
+  h.call('recover',{token:account.recovery},first,'first-device'),
+  h.call('recover',{token:account.recovery},second,'second-device'),
+ ]);
+ assert.equal(results.filter(r=>r.status===200).length,1);
+ assert.ok(results.some(r=>r.status===409||r.status===401));
+ const sessions=await Promise.all([original,first,second].map(j=>h.call('me',null,j)));
+ assert.equal(sessions.filter(r=>r.data.account?.id===account.account.id).length,1);
+ assert.equal((await h.call('recover',{token:account.recovery},h.jar(),'replay-device')).status,401);
+});
+
+test('concurrent enrolled devices cannot both save a free starter', async t => {
+ const h=harness(), first=h.jar(), second=h.jar();
+ t.after(()=>h.DB.close());
+ const account=await h.signup(first,'qa_devices');
+ assert.equal((await h.call('recover',{token:account.recovery},second,'second-device')).status,200);
+ assert.equal((await h.call('login',{username:account.account.username,pin:'5682'},first,'first-device')).status,200);
+ const attempts=await Promise.all([first,second].map(async (jar,index)=>{
+  const {data,revision}=(await h.call('me',null,jar)).data;
+  assert.equal(revision,0);
+  const pet=['dog','cat'][index];
+  adopt(data.profiles.ari,pet,true);
+  const saved=await h.call('save',{requestId:'starter-device-'+index,revision,data},jar);
+  return {pet,status:saved.status};
+ }));
+ assert.deepEqual(attempts.map(r=>r.status).sort(),[200,409]);
+ const next=(await h.call('me',null,first)).data;
+ assert.equal(next.revision,1);
+ assert.deepEqual(next.data.profiles.ari.collection.pets.map(p=>p.species),[attempts.find(r=>r.status===200).pet]);
+ assert.equal(next.data.profiles.kal.collection?.pets.length??0,0);
+ assert.equal(h.DB.db.prepare('SELECT count(*) AS n FROM wallet_transactions').get().n,1);
+});
+
 test('new recovery passports expire and pre-migration passports remain usable once',async t=>{
  const h=harness(),j=h.jar(),a=await h.signup(j);
  t.after(()=>h.DB.close());
