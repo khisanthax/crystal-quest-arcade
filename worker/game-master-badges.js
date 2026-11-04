@@ -20,6 +20,8 @@ export async function saveBadge(body,{db,a,env,fail,response,randomToken,signatu
  const {requestId,rarity,icon,active} = body;
  const name = typeof body.name === 'string' ? body.name.trim() : '';
  const description = typeof body.description === 'string' ? body.description.trim() : '';
+ const reason = typeof body.reason === 'string' ? body.reason.trim() : '';
+ if (reason.length > 180) fail(400,'Enter a shorter reason for this badge change.');
  if (typeof requestId !== 'string' || !badgeId.test(requestId) || body.confirmed !== true) fail(400,'Confirm the badge changes.');
  if (!name || name.length > 60 || !description || description.length > 300) fail(400,'Enter a badge name and a short description.');
  if (!RARITIES.includes(rarity) || !icons.includes(icon) || typeof active !== 'boolean') fail(400,'Choose a valid rarity, icon and status.');
@@ -53,7 +55,7 @@ export async function saveBadge(body,{db,a,env,fail,response,randomToken,signatu
   db.prepare('INSERT INTO game_master_badges(id,name,description,rarity,icon,active,version,updated) SELECT ?,?,?,?,?,?,?,? WHERE '+requestGate+' ON CONFLICT(id) DO UPDATE SET name=excluded.name,description=excluded.description,rarity=excluded.rarity,icon=excluded.icon,active=excluded.active,version=excluded.version,updated=excluded.updated')
    .bind(id,name,description,rarity,icon,Number(active),badge.version,now,requestId,marker),
   db.prepare("INSERT INTO game_master_audit (request_id,actor,account_id,profile,action,reason,previous,updated,created) SELECT ?,?,?,NULL,'badge:save',?,?,?,? WHERE "+requestGate)
-   .bind(requestId,a.id,a.id,'Exclusive badge configuration',JSON.stringify(old ? badgeView(old) : null),JSON.stringify(badge),now,requestId,marker),
+   .bind(requestId,a.id,a.id,reason || 'Exclusive badge configuration',JSON.stringify(old ? badgeView(old) : null),JSON.stringify(badge),now,requestId,marker),
  ]);
  if (!applied[0].meta.changes) {
   const concurrent = await existing();

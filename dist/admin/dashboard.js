@@ -21,8 +21,8 @@ const select = (label, name, rows, current) =>
 const field = (label, name, attributes = '') => `<label>${label}<input name="${name}" ${attributes}></label>`;
 const card = (label, value) => `<span class="chip">${label} <strong>${esc(value)}</strong></span>`;
 const state = {
-  key: '', section: 'players', selected: null, profile: 'emberia',
-  players: [], catalog: {}, detail: null, draft: null, pending: false, load: 0, recovery: null
+  key: '', section: 'players', selected: null, profile: 'emberia', reportPack: null,
+  players: [], catalog: {}, detail: null, snapshots: [], draft: null, pending: false, load: 0, recovery: null
 };
 
 function clearRecovery() {
@@ -107,7 +107,7 @@ function actionForm(type, fields, label = 'Preview change') {
   return `<form data-change="${type}">
     ${fields}
     ${field('Reason', 'reason', 'required maxlength="180" placeholder="Birthday gift, correction, or other reason"')}
-    <button class="primary">${label}</button>
+    <button class="primary">${label}</button><p class="form-error" role="alert" hidden></p>
   </form>`;
 }
 
@@ -166,8 +166,10 @@ function petPanel() {
     <h3>Owned pets</h3>${owned}
     <h3 class="section-gap">Manage a pet</h3>
     ${actionForm('pet', `<div class="fields">${select('Pet action', 'operation',
-      [['grant', 'Grant pet'], ['revoke', 'Revoke pet'], ['restore', 'Restore pet'], ['xp', 'Set pet XP']])}
-      ${select('Pet species', 'item', catalogRows('pets'))}</div>
+      [['grant', 'Grant pet'], ['revoke', 'Revoke pet'], ['restore', 'Restore pet'], ['xp', 'Set pet XP'],
+        ...(pets.length ? [['replace', 'Replace pet']] : [])])}
+      ${select('Pet species', 'item', catalogRows('pets'))}
+      <div id="replacement-field" hidden>${select('Replacement species', 'replacement', [])}</div></div>
       <div id="xp-field" hidden>${field('Pet XP', 'xp', 'type="number" min="0" max="6000" step="1" disabled')}</div>`)}
     <h3 class="section-gap">Manage an item</h3>
     ${actionForm('item', `<div class="fields">${select('Item action', 'operation',
@@ -180,6 +182,7 @@ function petPanel() {
       .map(([id, qty]) => (state.catalog.food?.find(f => f.id === id)?.name || id) + ' × ' + qty).join(', ') || 'No treats')}</p>
     <p>${esc((collection?.accessories || []).map(id =>
       state.catalog.accessories?.find(a => a.id === id)?.name || id).join(', ') || 'No accessories')}</p>`);
+  updatePetFields($('work').querySelector('form[data-change="pet"]'));
 }
 
 function rewardItems() {
@@ -243,13 +246,26 @@ function editPackage(id, duplicate = false) {
 function worldsPanel() {
   const profile = profileData();
   const packs = state.detail?.data?.packs || {};
+  const seenRunnerSaves = new Set();
   const saves = ['stageCourses', 'originalCourses', 'courses', 'runs'].flatMap(field =>
-    Object.entries(profile?.[field] || {}).map(([key, run]) => {
+    Object.entries(profile?.[field] || {}).flatMap(([key, record]) => {
+      const run = record.ledger || record;
+      const original = field === 'originalCourses';
+      const runnerKey = run.sessionId && run.sessionId + '|' + run.stage;
+      if (!original && runnerKey && seenRunnerSaves.has(runnerKey)) return [];
+      if (!original && runnerKey) seenRunnerSaves.add(runnerKey);
       const world = run.theme || run.world;
-      const mode = field === 'originalCourses' ? 'Original Adventure' : 'Temple Run';
+      const mode = original ? 'Original Adventure' : 'Temple Run';
       const stage = WORLDS[world]?.stages[run.stage];
-      return [field + '|' + key, [mode, WORLDS[world]?.name, stage, packs[run.packId]?.title].filter(Boolean).join(' · ')];
+      const label = [mode, WORLDS[world]?.name, stage, packs[run.packId]?.title].filter(Boolean).join(' · ');
+      const score = Math.max(run.score || 0, record.progress?.run?.score || 0);
+      return [{id: field + '|' + key, label, score}];
     }));
+  const scoredSaves = saves.filter(s => s.score > 0).map(s => [s.id, s.label + ' · ' + s.score + ' points']);
+  const recordedBests = Object.entries(profile?.levelProgress || {}).flatMap(([packId, entry]) =>
+    Object.entries(entry.worlds || {}).filter(([, world]) => world.bestScore > 0).map(([world, record]) => [
+      JSON.stringify([packId, world]), (packs[packId]?.title || packId) + ' · ' + WORLDS[world]?.name + ' · ' + record.bestScore + ' points'
+    ]));
   const completed = Object.entries(profile?.journeys || {}).flatMap(([mode, worlds]) =>
     Object.entries(worlds).filter(([, record]) => record.completed.length).map(([world, record]) =>
       `<li>${mode === 'original' ? 'Original Adventure' : 'Temple Run'} · ${esc(WORLDS[world]?.name || world)} ·
@@ -265,31 +281,132 @@ function worldsPanel() {
       select('Completion', 'completed', [['true', 'Mark complete'], ['false', 'Mark incomplete']]) + '</div>')}
     <h3 class="section-gap">Reset a saved course</h3>
     ${saves.length ? actionForm('run-reset', '<p>Clear a saved course to start that course again. Study history is kept separately.</p>' +
-      select('Saved course', 'course', saves)) : '<p>This profile has no saved courses.</p>'}`);
+      select('Saved course', 'course', saves.map(s => [s.id, s.label]))) : '<p>This profile has no saved courses.</p>'}
+    <h3 class="section-gap">Reset a score</h3>
+    ${scoredSaves.length ? actionForm('high-score-reset', '<p>Reset points for a saved stage and keep its progress.</p>' +
+      select('Saved stage score', 'course', scoredSaves), 'Preview stage score reset') : '<p>No saved stages have points to reset.</p>'}
+    ${recordedBests.length ? actionForm('high-score-reset', '<p>Reset a recorded best score for one test in one world.</p>' +
+      select('Test and world best score', 'record', recordedBests), 'Preview best score reset') : '<p>No test and world best scores to reset.</p>'}`);
 }
 
-function progressPanel() {
-  const p = profileData();
-  const data = state.detail?.data;
-  const study = Object.entries(p?.learning || {});
-  const cases = Object.entries(p?.homework?.cases || {});
-  const missions = cases.flatMap(([id]) => {
-    const pack = data?.homeworkPacks?.[id];
-    return (pack?.questions || []).map((q, i) =>
-      [id + '|' + q.id, pack.title + ' · Mission ' + (i + 1)]);
+function reportStats(coverage) {
+  const stats = [
+    ['Questions shown', coverage.attempted + ' / ' + coverage.totalQuestions],
+    ['First-attempt accuracy', coverage.accuracy === null ? 'No attempts yet' : coverage.accuracy + '%'],
+    ['Concepts assessed', coverage.assessedConcepts + ' / ' + coverage.totalConcepts],
+    ['Concepts mastered', coverage.mastered + ' / ' + coverage.totalConcepts],
+    ['Concepts to practice', coverage.needsPractice],
+    ['Study sessions', coverage.sessions],
+    ['Latest session', coverage.lastSession ? date(coverage.lastSession) : 'No sessions yet']
+  ];
+  return `<dl class="report-stats">${stats.map(([label, value]) =>
+    `<div><dt>${label}</dt><dd>${esc(value)}</dd></div>`).join('')}</dl>
+    ${coverage.presented ? `<p>${coverage.firstCorrect} first-try correct out of ${coverage.presented} prompts shown.</p>` : ''}`;
+}
+
+function missedConcepts(missed) {
+  if (!missed.length) return '<p>No concepts flagged for practice on this test.</p>';
+  return `<ul class="list">${missed.map(concept => `<li>
+    <strong>${esc(concept.label)}</strong>
+    <p>${concept.incorrect} incorrect ${concept.incorrect === 1 ? 'attempt' : 'attempts'}${concept.latest ? ' · Last seen ' + esc(date(concept.latest)) : ''}</p>
+  </li>`).join('')}</ul>`;
+}
+
+function readingReport(cases) {
+  if (!cases.length) return '<p>No reading cases recorded for this identity.</p>';
+  return `<ul class="list">${cases.map(record => `<li>
+    <strong>${esc(record.title)}</strong>
+    <p>${record.written} of ${record.total} written · ${record.completedAt ? 'Completed' : record.attempts ? 'In progress' : 'Not started'}
+    ${record.active ? ' · Current case' : ''} · ${record.attempts} ${record.attempts === 1 ? 'case attempt' : 'case attempts'}</p>
+  </li>`).join('')}</ul>`;
+}
+
+function worldReport(worlds) {
+  const played = worlds.filter(world =>
+    world.runnerCompleted.length || world.originalCompleted.length || world.packStagesCompleted.length ||
+    world.bestScore || world.finishes);
+  if (!played.length) return '<p>No course progress recorded for this identity.</p>';
+  return `<ul class="list">${played.map(world => `<li>
+    <strong>${esc(world.name)}</strong>
+    <p>Temple Run ${world.runnerCompleted.length}/3 · Original Adventure ${world.originalCompleted.length}/3</p>
+    <small>Selected test · ${world.packStagesCompleted.length}/3 stages · ${world.bestScore === null ? 'No best score yet' : world.bestScore + ' best points'} ·
+      ${world.finishes} ${world.finishes === 1 ? 'course finish' : 'course finishes'}</small>
+  </li>`).join('')}</ul>`;
+}
+
+async function progressPanel(token) {
+  title('Progress & reports', '<p>Loading the selected explorer’s report…</p>');
+  const report = await request('progress-report', {
+    account: state.selected, profile: state.profile, packId: state.reportPack || undefined
   });
-  title('Progress & reports', `${profilePicker()}
-    <h3>Study packs</h3>
-    ${study.length ? `<ul class="list">${study.map(([id, record]) => {
-      const attempted = Object.values(record?.questions || {}).filter(q => q.seen > 0);
-      return `<li>${esc(data?.packs?.[id]?.title || id)} · ${attempted.length} questions tried</li>`;
-    }).join('')}</ul>` : '<p>No learning activity recorded.</p>'}
+  if (token !== state.load) return;
+  state.reportPack = report.pack.id;
+  const cases = report.homework.cases;
+  const missions = cases.filter(record => record.attempts > 0).flatMap(record => (record.missions || []).map(mission =>
+    [record.id + '|' + mission.id, record.title + ' · Mission ' + mission.number]));
+  const needsPractice = report.missed.filter(concept => concept.review > 0);
+  const priorMisses = report.missed.filter(concept => concept.review === 0);
+  const packOptions = report.packs.map(p => [p.id, p.title + (p.archived ? ' (past test)' : '')]);
+  const location = report.location;
+  const activeWorld = location && WORLDS[location.world];
+  const locationLabel = activeWorld && [activeWorld.name, activeWorld.stages[location.stage]].filter(Boolean).join(' · ');
+  title('Progress & reports', `
+    <p>Learning and game records for <strong>${esc(player().username)}</strong>.</p>
+    <div class="report-filters">${profilePicker()}${select('Study pack', 'report-pack', packOptions, report.pack.id)}</div>
+    <h3>Learning coverage</h3>
+    ${reportStats(report.coverage)}
+    <h3 class="section-gap">Concepts to practice</h3>
+    ${missedConcepts(needsPractice)}
+    ${priorMisses.length ? `<details><summary>Earlier missed concepts</summary>${missedConcepts(priorMisses)}</details>` : ''}
     <h3 class="section-gap">Reading Detective</h3>
-    ${cases.length ? `<ul class="list">${cases.map(([id, history]) =>
-      `<li>${esc(data?.homeworkPacks?.[id]?.title || id)} · ${history.length} saved case attempts</li>`).join('')}</ul>`
-      : '<p>No reading cases recorded.</p>'}
-    ${missions.length ? actionForm('mission-reset', '<h3>Reopen a mission</h3><p>Reset this mission in the most recent case attempt.</p>' +
-      select('Mission', 'mission', missions)) : ''}`);
+    ${readingReport(cases)}
+    <h3 class="section-gap">Worlds & courses</h3>
+    ${locationLabel ? `<p>Last played ${esc(locationLabel)}.</p>` : ''}
+    ${worldReport(report.worlds)}
+    ${missions.length ? `<details class="section-gap"><summary>Reopen a reading mission</summary>
+      ${actionForm('mission-reset', '<p>Reset this mission in the most recent case attempt.</p>' +
+        select('Mission', 'mission', missions))}</details>` : ''}`);
+}
+
+function verificationFields() {
+  return field('Type the explorer’s username', 'username', 'required maxlength="20" autocomplete="off" autocapitalize="off" spellcheck="false"');
+}
+
+function snapshotLabel(snapshot) {
+  return 'Revision ' + snapshot.revision + ' · ' + date(snapshot.created);
+}
+
+function verifiedSnapshots() {
+  const current = state.snapshots.find(snapshot => snapshot.current);
+  const past = state.snapshots.filter(snapshot => !snapshot.current);
+  const username = player().username;
+  return `<section class="section-gap">
+    <h3>Verified account backups</h3>
+    <p>Each verified backup covers both Emberia and Luminara for ${esc(username)}. It includes crystals,
+      pets, rewards, worlds, study progress, and Reading Detective cases.</p>
+    ${current
+      ? `<p>Current backup <strong>${esc(snapshotLabel(current))}</strong>.</p>`
+      : actionForm('snapshot-create', '<p>Create a verified backup of the current cloud save.</p>' +
+        verificationFields(), 'Preview verified backup')}
+    ${state.snapshots.length ? `<ul class="list">${state.snapshots.map(snapshot => `<li>
+      <strong>${esc(snapshotLabel(snapshot))}</strong>${snapshot.current ? ' · Current' : ''}
+      <small> · Check ${esc(snapshot.digest.slice(0, 12))}</small>
+      <div class="actions"><button data-action="snapshot-download" data-snapshot-id="${esc(snapshot.id)}">
+        Download revision ${snapshot.revision}</button></div></li>`).join('')}</ul>` : ''}
+    </section>
+    <details class="review section-gap" id="whole-account">
+      <summary>Reset or restore the whole explorer</summary>
+      <h3 class="section-gap">Change both fantasy identities</h3>
+      <p>These tools affect all saved game progress for ${esc(username)}. After a reset or restore,
+        load the updated cloud save on any iPad before playing.</p>
+      ${current ? actionForm('account-reset', '<h3>Reset explorer progress</h3><p>Start over with both identities. ' +
+        'The verified backup stays available for restoration.</p>' + verificationFields(), 'Preview whole-explorer reset')
+        : '<p>Create a verified backup of the current revision before resetting or restoring this explorer.</p>'}
+      ${current && past.length ? actionForm('snapshot-restore', '<h3>Restore a verified backup</h3>' +
+        '<p>Replace both identities with an earlier verified backup. Keep the current verified backup in case you need to undo the restore.</p>' +
+        select('Earlier verified backup', 'snapshotId', past.map(snapshot => [snapshot.id, snapshotLabel(snapshot)])) +
+        verificationFields(), 'Preview whole-explorer restore') : ''}
+    </details>`;
 }
 
 function backupPanel() {
@@ -298,18 +415,20 @@ function backupPanel() {
     <div class="actions"><button data-action="backup-one">Export this explorer</button>
     <button data-action="backup-all">Export all explorers</button></div>
     ${rows.length ? actionForm('restore', '<h3>Restore a saved revision</h3><p>This restores the selected identity’s gameplay and study progress. Its wallet, pets, and Reading Detective cases stay current.</p>' +
-      select('Available backups', 'revision', rows)) : '<p>No previous save revisions available.</p>'}`);
+      select('Available backups', 'revision', rows)) : '<p>No previous save revisions available.</p>'}
+    ${verifiedSnapshots()}`);
 }
 
 const auditLabels = {
   'wallet:add': 'Crystals added', 'wallet:remove': 'Crystals removed',
   'wallet:set': 'Balance set', 'wallet:reverse': 'Crystal adjustment reversed',
   'pet:grant': 'Pet granted', 'pet:revoke': 'Pet revoked', 'pet:restore': 'Pet restored',
-  'pet:xp': 'Pet XP changed', 'item:grant': 'Item granted', 'item:remove': 'Item removed',
+  'pet:xp': 'Pet XP changed', 'pet:replace': 'Pet replaced', 'item:grant': 'Item granted', 'item:remove': 'Item removed',
   'item:set': 'Item quantity set', reward: 'Gifts awarded', 'run-reset': 'Course save cleared',
-  'stage-status': 'Stage completion changed', 'mission-reset': 'Reading mission reopened',
+  'stage-status': 'Stage completion changed', 'high-score-reset': 'Score reset', 'mission-reset': 'Reading mission reopened',
   'study-pack:assign': 'Study pack assigned', 'study-pack:archive': 'Study pack archived',
-  restore: 'Profile progress restored', 'reward:random': 'Surprise gift awarded',
+  restore: 'Profile progress restored', 'snapshot:create': 'Verified backup created',
+  'snapshot-create': 'Verified backup created', 'account-reset': 'Explorer progress reset', 'snapshot-restore': 'Explorer backup restored', 'reward:random': 'Surprise gift awarded',
   'reward-package': 'Reward package awarded', 'package:save': 'Reward package saved', badge: 'Collectible badge awarded', 'badge:save': 'Collectible badge saved'
 };
 
@@ -318,11 +437,18 @@ function auditDetail(entry) {
   const after = entry.updated || {};
   const changes = [];
   if (Number.isInteger(after.wallet)) changes.push('◆ ' + before.wallet + ' → ◆ ' + after.wallet);
-  if (after.pet) changes.push(after.pet.name + ' · ' + after.pet.xp + ' XP');
+  if (entry.action === 'pet:replace' && before.pet && after.pet) {
+    const names = [before.pet.species, after.pet.species].map(id => state.catalog.pets.find(p => p.id === id)?.species || id);
+    changes.push(names.join(' → ') + ' · ' + after.pet.xp + ' XP');
+  } else if (after.pet) changes.push(after.pet.name + ' · ' + after.pet.xp + ' XP');
   if (before.pet && after.pet === null) changes.push(before.pet.name + ' removed');
   if (after.item) changes.push((state.catalog.food.find(p => p.id === after.item) ||
     state.catalog.accessories.find(p => p.id === after.item))?.name + ' · ' + before.quantity + ' → ' + after.quantity);
   if (after.username) changes.push(after.username);
+  if (entry.action === 'high-score-reset') {
+    const beforeScore = before.score ?? before.bestScore;
+    if (beforeScore !== undefined) changes.push(beforeScore + ' → 0 points');
+  }
   if (after.randomDraw) changes.push('Recipient selected by draw');
   if (after.package?.name) changes.push(after.package.name);
   if (after.badge?.name) changes.push(after.badge.name);
@@ -379,6 +505,7 @@ async function render() {
   const token = ++state.load;
   state.draft = null;
   state.detail = null;
+  state.snapshots = [];
   const p = player();
   $('sections').innerHTML = Object.entries(sections).map(([id, label]) =>
     `<button data-section="${id}" aria-pressed="${state.section === id}">${label}</button>`).join('');
@@ -388,15 +515,21 @@ async function render() {
   try {
     if (state.section === 'audit') return await auditPanel(token);
     if (state.section === 'rewards') return await rewardPanel(token);
-    if (['pets', 'worlds', 'progress', 'backup', 'study'].includes(state.section)) {
+    if (state.section === 'progress') return await progressPanel(token);
+    if (['pets', 'worlds', 'backup', 'study'].includes(state.section)) {
       title('Loading player details', '<p>Fetching the current save…</p>');
-      const detail = await request('detail', {account: p.id});
+      const account = p.id;
+      const [detail, snapshotResult] = await Promise.all([
+        request('detail', {account}),
+        state.section === 'backup' ? request('snapshots', {account}) : null
+      ]);
       if (token !== state.load) return;
       state.detail = detail;
+      state.snapshots = snapshotResult?.snapshots || [];
     }
     ({
       players: accountPanel, crystals: crystalPanel, pets: petPanel,
-      worlds: worldsPanel, progress: progressPanel, backup: backupPanel, study: studyPanel
+      worlds: worldsPanel, backup: backupPanel, study: studyPanel
     })[state.section](p);
   } catch (e) {
     if (token !== state.load) return;
@@ -418,6 +551,15 @@ function changeText(change, recipients, form) {
     case 'pet': {
       const pet = state.catalog.pets.find(p => p.id === change.item);
       if (!pet) throw Error('Choose a pet species.');
+      if (change.operation === 'replace') {
+        const collection = profileData()?.collection;
+        const existing = collection?.pets.find(p => p.species === change.item);
+        const replacement = state.catalog.pets.find(p => p.id === change.replacement);
+        if (!existing || !replacement) throw Error('Choose an owned pet and a replacement species.');
+        const equipped = collection.equipped === existing.id;
+        const customName = existing.name !== pet.name ? ' Custom name: ' + existing.name + '.' : '';
+        return `Replace ${pet.species} with ${replacement.species}. Transfer ${existing.xp} XP and compatible accessories.${customName}${equipped ? ' The replacement will be equipped.' : ''}`;
+      }
       if (change.operation === 'xp') return `Set ${pet.species} to ${change.xp} XP.`;
       if (change.operation === 'revoke') {
         const collection = profileData()?.collection;
@@ -432,12 +574,21 @@ function changeText(change, recipients, form) {
       if (!item) throw Error('Choose an inventory item.');
       return `Item change: ${change.operation} ${item.name} (quantity ${change.quantity}).`;
     }
+    case 'high-score-reset': {
+      const record = (form.elements.course || form.elements.record).selectedOptions[0].textContent;
+      return 'Reset to 0 points: ' + record + '.';
+    }
     case 'run-reset': return 'Clear this saved course: ' + form.elements.course.selectedOptions[0].textContent + '.';
     case 'stage-status': return (change.completed ? 'Mark complete: ' : 'Mark incomplete: ') +
       WORLDS[change.world].name + ' · ' + WORLDS[change.world].stages[change.stage] + '.';
     case 'mission-reset': return 'Reopen ' + form.elements.mission.selectedOptions[0].textContent + '.';
     case 'study-pack': return (change.operation === 'assign' ? 'Assign ' : 'Archive ') +
       state.detail?.data?.packs[change.packId]?.title + '.';
+    case 'account-reset': return 'Reset crystals, pets and items, world stages, learning, reading cases, and badges for Emberia and Luminara. Verified backup ' +
+      snapshotLabel(state.snapshots.find(snapshot => snapshot.id === change.snapshotId)) + '.';
+    case 'snapshot-restore': return 'Replace progress for Emberia and Luminara with ' +
+      snapshotLabel(state.snapshots.find(snapshot => snapshot.id === change.snapshotId)) +
+      '. Your current verified backup will still be available.';
     case 'restore': return 'Restore this identity’s gameplay and study progress to revision ' + change.revision + '.';
     case 'account': {
       const action = change.operation.replaceAll('-', ' ');
@@ -464,6 +615,21 @@ function rewardText(change) {
   return gifts.join(', ');
 }
 
+function updatePetFields(form) {
+  const owned = new Set((profileData()?.collection?.pets || []).map(pet => pet.species));
+  const operation = form.elements.operation.value;
+  const replacement = operation === 'replace';
+  const existing = ['revoke', 'xp', 'replace'].includes(operation);
+  const rows = catalogRows('pets');
+  const selected = form.elements.item.value;
+  form.elements.item.innerHTML = options(rows.filter(([id]) => !id || existing === owned.has(id)), selected);
+  const replaceField = form.elements.replacement;
+  replaceField.innerHTML = options(rows.filter(([id]) => !owned.has(id)));
+  replaceField.disabled = !replacement;
+  replaceField.required = replacement;
+  $('replacement-field').hidden = !replacement;
+}
+
 function prepare(form) {
   const values = new FormData(form);
   const change = {type: form.dataset.change};
@@ -472,7 +638,7 @@ function prepare(form) {
   for (const [name, value] of values) {
     if (!['reason', 'recipients'].includes(name) && value !== '') {
       change[name] = ['amount', 'crystals', 'foodQuantity', 'xp', 'quantity', 'revision', 'auditId', 'stage'].includes(name)
-        ? Number(value) : String(value).trim();
+        ? Number(value) : name === 'username' ? String(value) : String(value).trim();
     }
   }
   if (change.course) {
@@ -481,20 +647,41 @@ function prepare(form) {
     change.courseKey = change.course.slice(divider + 1);
     delete change.course;
   }
+  if (change.record) {
+    [change.packId, change.world] = JSON.parse(change.record);
+    delete change.record;
+  }
   if (change.mission) {
     [change.packId, change.questionId] = change.mission.split('|');
     delete change.mission;
   }
   if (change.completed !== undefined) change.completed = change.completed === 'true';
+  const verifiedAction = ['snapshot-create', 'account-reset', 'snapshot-restore'].includes(change.type);
+  if (verifiedAction && change.username !== player().username) throw Error('Type the exact explorer username before continuing.');
+  if (change.type === 'account-reset' || change.type === 'snapshot-restore') {
+    const current = state.snapshots.find(snapshot => snapshot.current);
+    if (!current) throw Error('Create a verified backup of the current save first.');
+    if (change.type === 'account-reset') change.snapshotId = current.id;
+    else change.safetySnapshotId = current.id;
+  }
   const ids = ['reward', 'reward-package'].includes(change.type) ? values.getAll('recipients') : [state.selected];
   if (!ids.length) throw Error('Choose at least one explorer.');
   const recipients = state.players.filter(p => ids.includes(p.id));
-  const targets = recipients.map(p => ({account: p.id, revision: p.revision, profile: state.profile}));
+  const targets = recipients.map(p => ({
+    account: p.id,
+    revision: verifiedAction ? state.snapshots.find(snapshot => snapshot.current)?.revision ?? p.revision : p.revision,
+    profile: state.profile
+  }));
   const requestId = crypto.randomUUID();
   let action = 'mutate';
   let body = {requestId, confirmed: true, reason, targets, change};
   let description;
-  if (change.type === 'package-save') {
+  if (change.type === 'snapshot-create') {
+    action = 'snapshot-create';
+    body = {account: player().id, revision: state.detail.player.revision, requestId, confirmed: true,
+      username: change.username, reason};
+    description = 'Verify and save cloud revision ' + body.revision + ' for both Emberia and Luminara.';
+  } else if (change.type === 'package-save') {
     const {name, active, ...items} = change;
     const reward = {...items, type: 'reward'};
     if (!name) throw Error('Give the package a name.');
@@ -512,15 +699,19 @@ function prepare(form) {
     if (form.draw && targets.length === 1 && targets[0].account === form.draw.account) body.draw = form.draw.value;
     description = changeText(change, recipients, form);
   }
+  const confirmationLabel = {
+    'snapshot-create': 'Create verified backup', 'account-reset': 'Reset both identities',
+    'snapshot-restore': 'Restore both identities'
+  }[change.type] || 'Apply confirmed change';
   state.draft = {form, action, body};
   form.hidden = true;
   form.insertAdjacentHTML('afterend', `<section id="review" class="review" tabindex="-1">
     <h3>Confirm change</h3>
     <p>${esc(description)}</p>
     <p>${change.type === 'package-save' ? 'Reusable reward package' : 'For ' + esc(recipients.map(p => p.username).join(', '))}
-      ${change.type === 'account' ? '' : ' · ' + profiles[state.profile]}</p>
+      ${change.type === 'account' || verifiedAction ? '' : ' · ' + profiles[state.profile]}</p>
     <p>Reason: ${esc(reason)}</p>
-    <div class="actions"><button data-action="confirm" class="primary">Apply confirmed change</button>
+    <div class="actions"><button data-action="confirm" class="${change.type === 'account-reset' ? 'danger' : 'primary'}">${confirmationLabel}</button>
     <button data-action="cancel">Cancel</button></div><p id="review-error" role="alert" hidden></p></section>`);
   $('review').focus();
   message('');
@@ -553,7 +744,7 @@ async function confirmChange(button) {
   try {
     const result = await request(state.draft.action, state.draft.body);
     const isRotation = state.draft.body.change?.operation === 'rotate-recovery';
-    let outcome = 'Change saved.';
+    let outcome = state.draft.action === 'snapshot-create' ? 'Verified backup created.' : 'Change saved.';
     if (result.recovery) outcome = await showRecovery(result.recovery);
     else if (isRotation && result.duplicate) {
       outcome = 'The passport was replaced. If you missed the download, create a new passport.';
@@ -643,7 +834,9 @@ $('lock').addEventListener('click', async () => {
   state.catalog = {};
   state.audit = [];
   state.packages = [];
+  state.snapshots = [];
   state.selected = null;
+  state.reportPack = null;
   $('search').value = '';
   state.detail = null;
   state.draft = null;
@@ -669,7 +862,10 @@ $('dashboard').addEventListener('click', async event => {
   const {account, section, action} = button.dataset;
   if (account || section) {
     clearRecovery();
-    if (account) state.selected = account;
+    if (account && account !== state.selected) {
+      state.selected = account;
+      state.reportPack = null;
+    }
     if (section) state.section = section;
     $('work').classList.remove('workshop');
     message('');
@@ -696,6 +892,17 @@ $('dashboard').addEventListener('click', async event => {
       case 'all': return chooseRecipients(button, false);
       case 'workshop': return showWorkshop();
       case 'hide-recovery': clearRecovery(); return await render();
+      case 'snapshot-download': {
+        button.disabled = true;
+        try {
+          const data = await request('snapshot-download', {account: state.selected, id: button.dataset.snapshotId});
+          download(data, 'crystal-quest-verified-revision-' + data.snapshot.revision + '.json');
+          message('Verified private backup downloaded.');
+        } finally {
+          button.disabled = false;
+        }
+        break;
+      }
       case 'backup-one':
       case 'backup-all': {
         button.disabled = true;
@@ -722,7 +929,12 @@ $('work').addEventListener('change', async event => {
   if (input.name === 'world' && input.form?.dataset.change === 'stage-status') {
     input.form.elements.stage.innerHTML = options(WORLDS[input.value].stages.map((name, index) => [index, name]));
   }
+  if (input.name === 'report-pack') {
+    state.reportPack = input.value;
+    return render();
+  }
   if (input.name === 'profile' && profiles[input.value]) {
+    state.reportPack = null;
     clearRecovery();
     state.profile = input.value;
     message('');
@@ -747,6 +959,7 @@ $('work').addEventListener('change', async event => {
     $('xp-field').hidden = !showXP;
     form.elements.xp.disabled = !showXP;
     form.elements.xp.required = showXP;
+    updatePetFields(form);
   }
   if (form?.dataset.change === 'item' && input.name === 'category') {
     form.elements.item.innerHTML = options(catalogRows(input.value));
@@ -757,5 +970,11 @@ $('work').addEventListener('submit', event => {
   if (!event.target.matches('form[data-change]')) return;
   event.preventDefault();
   if (state.pending || state.draft) return;
-  try { prepare(event.target); } catch (e) { message(e.message, true); }
+  const feedback = event.target.querySelector('.form-error');
+  feedback.hidden = true;
+  try { prepare(event.target); } catch (e) {
+    feedback.textContent = e.message;
+    feedback.hidden = false;
+    message(e.message, true);
+  }
 });

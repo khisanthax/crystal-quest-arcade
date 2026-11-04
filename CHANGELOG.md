@@ -1,5 +1,21 @@
 # Changelog
 
+## Sites v27
+
+- View owner-only study coverage, first-attempt accuracy, practice priorities, homework completion and world progress.
+- Prevent the owner dashboard from being embedded in a frame.
+
+## Sites v26
+
+- Create, download and restore verified owner snapshots. Whole-account progress reset requires a current verified snapshot and exact username confirmation.
+- Adapt runner drawing resolution under sustained slow frames without changing the visible viewport or game rules.
+
+## Sites v25
+
+- Replace pets atomically while preserving XP, equipment and compatible customization.
+- Reset one saved stage score or one test and world best with a reviewed owner action.
+- Activate runner controls using focused keyboard buttons.
+
 ## Sites v24
 
 - Create and grant exclusive collectible badges through Game Master. Players see earned badges in Rewards.

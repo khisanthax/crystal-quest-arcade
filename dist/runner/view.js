@@ -6,6 +6,7 @@ import {THEMES} from './model.js';
 export class RunnerView{
  constructor(canvas,onFailure){
   this.canvas=canvas;this.resources=[];this.objects=new Map();this.theme=null;this.disposed=false;
+  this.frameSamples=0;this.slowFrames=0;
   try{this.renderer=new T.WebGLRenderer({canvas,antialias:true,alpha:false,powerPreference:'low-power'});this.renderer.setPixelRatio(Math.min(devicePixelRatio||1,1.5));this.renderer.outputColorSpace=T.SRGBColorSpace;}catch{onFailure();return;}
   this.scene=new T.Scene();this.camera=new T.PerspectiveCamera(57,1,.1,260);this.scene.add(new T.HemisphereLight(0xfff4dd,0x343660,2.4));const sun=new T.DirectionalLight(0xffffff,2.6);sun.position.set(-5,12,8);this.scene.add(sun);
   this.box=new T.BoxGeometry(1,1,1);this.ball=new T.IcosahedronGeometry(1,1);this.gem=new T.OctahedronGeometry(1);this.ring=new T.TorusGeometry(1,.1,6,24);this.resources.push(this.box,this.ball,this.gem,this.ring);this.materials=new Map();this.labels=new Map();
@@ -46,6 +47,17 @@ export class RunnerView{
   this.updatePet(run,time,x);this.camera.position.set(x(p.x)*.22,5.1,9.8);this.camera.lookAt(x(p.x)*.12,1,-15);this.renderer.render(this.scene,this.camera);
  }
  updatePet(run,time,x){const pet=run.pet,key=pet?JSON.stringify(pet):'';if(key!==this.petKey){if(this.pet)this.scene.remove(this.pet);this.pet=pet?buildPet(this,pet):null;this.petKey=key;if(this.pet)this.scene.add(this.pet);}if(!this.pet)return;if(this.pet.userData.bubble)this.pet.userData.bubble.visible=run.theme!=='underwater';const target=x(run.player.x)+.95;this.pet.position.x+=(target-this.pet.position.x)*.12;this.pet.position.z=1.1;animatePet(this.pet,time,run.mode==='running',run.theme==='underwater');if(!this.pet.userData.flying)this.pet.position.y+=run.player.y*.65;if(run.player.slide>0)this.pet.scale.y=.5;else this.pet.scale.y=.72+this.pet.userData.level*.013;if(run.mode==='stage'||run.mode==='victory')this.pet.rotation.y=Math.sin(time*3)*.5;else this.pet.rotation.y=-.25;if(run.petFlash>run.time)this.pet.rotation.z=Math.sin(time*14)*.12;else this.pet.rotation.z=0;}
- resize(){if(!this.renderer)return;const w=this.canvas.clientWidth,h=this.canvas.clientHeight;this.renderer.setSize(w,h,false);this.camera.aspect=w/h;this.camera.updateProjectionMatrix();}
+ adaptResolution(milliseconds,playing){
+  if(!playing||milliseconds>250){this.frameSamples=0;this.slowFrames=0;return;}
+  if(!this.renderer||milliseconds<=0)return;
+  this.frameSamples++;
+  if(milliseconds>28)this.slowFrames++;
+  if(this.frameSamples<36)return;
+  const ratio=this.renderer.getPixelRatio();
+  // Sustained slow frames lower only the drawing buffer resolution.
+  if(this.slowFrames>=27&&ratio>.75)this.renderer.setPixelRatio(Math.max(.75,ratio-.25));
+  this.frameSamples=0;this.slowFrames=0;
+ }
+ resize(){if(!this.renderer)return;const w=this.canvas.clientWidth,h=this.canvas.clientHeight;if(!w||!h)return;this.renderer.setSize(w,h,false);this.camera.aspect=w/h;this.camera.updateProjectionMatrix();}
  dispose(){this.disposed=true;if(!this.renderer)return;for(const g of this.resources)g.dispose();for(const m of this.materials.values())m.dispose();for(const m of this.labels.values())m.dispose();this.renderer.dispose();this.renderer.forceContextLoss();this.scene.clear();}
 }

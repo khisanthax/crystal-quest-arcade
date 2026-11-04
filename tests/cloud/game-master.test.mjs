@@ -2,6 +2,11 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {accountAPI,gameMasterPage} from '../../worker/accounts.js';
 import {LocalD1} from '../../worker/local-db.js';
+import {history} from '../../dist/runner/store.js';
+import {answerRecord,presentRecord} from '../../dist/runner/packs.js';
+import {assignLevel} from '../../dist/runner/levels.js';
+import {purchase} from '../../dist/runner/collection.js';
+import {originalCourse} from '../../dist/runner/original-session.js';
 import {newRun} from '../../dist/runner/model.js';
 import {assignHomework,caseState,ensureHomework} from '../../dist/reading/model.js';
 import {readingFixture} from '../reading/fixture.mjs';
@@ -196,7 +201,7 @@ test('Course and mission repair are targeted and a gameplay restore preserves cu
 test('Exclusive collectible badges are private, auditable, versioned and safe to grant in bulk',async t=>{
  const h=await setup(t);
  const mint={action:'badge-save',requestId:crypto.randomUUID(),confirmed:true,name:'Star Reader',
-  description:'A special reward for excellent detective work.',icon:'star',rarity:'RARE',active:true};
+  description:'A special reward for excellent detective work.',icon:'star',rarity:'RARE',active:true,reason:'Celebrate reading practice'};
  assert.equal((await h.gm(mint,h.child)).status,403);
  assert.equal((await h.gm({...mint,icon:'https://not-an-icon.example'})).status,400);
  const first=await h.gm(mint);
@@ -234,5 +239,217 @@ test('Exclusive collectible badges are private, auditable, versioned and safe to
  assert.deepEqual(backup.badges.luminara,[]);
  const history=(await h.gm({action:'audit'})).data.entries;
  assert.equal(history.filter(x=>x.action==='badge').length,2);
- assert.equal(history.filter(x=>x.action==='badge:save').length,2);
+ assert.deepEqual(history.filter(x=>x.action==='badge:save').map(x=>x.reason),['Celebrate reading practice','Celebrate reading practice']);
+});
+
+test('Pet replacement moves customization and equipped status without changing either wallet',async t=>{
+ const h=await setup(t);
+ assert.equal((await h.gm(h.change({type:'reward',crystals:40,pet:'dragon',accessory:'cap'}))).status,200);
+ assert.equal((await h.gm(h.change({type:'pet',operation:'grant',item:'fox'},1))).status,200);
+ const childSave=(await h.call('me',null,h.child)).data;
+ const pet=childSave.data.profiles.ari.collection.pets[0];
+ pet.name='Sparkler';
+ pet.accessories.head='cap';
+ assert.equal((await h.call('save',{requestId:'child-customized-pet',revision:2,data:childSave.data},h.child)).status,200);
+ assert.equal((await h.gm(h.change({type:'pet',operation:'xp',item:'dragon',xp:430},3))).status,200);
+ assert.equal((await h.gm(h.change({type:'pet',operation:'replace',item:'dragon',replacement:'fox'},4))).status,409);
+ const replace=h.change({type:'pet',operation:'replace',item:'dragon',replacement:'owl'},4);
+ assert.equal((await h.gm(replace)).status,200);
+ assert.equal((await h.gm(replace)).data.duplicate,true);
+ const profiles=(await h.call('me',null,h.child)).data.data.profiles;
+ assert.equal(profiles.ari.collection.wallet,40);
+ assert.equal(profiles.kal.crystals,0);
+ assert.equal(profiles.ari.collection.equipped,'owl');
+ assert.deepEqual(profiles.ari.collection.pets[0],{id:'owl',species:'owl',name:'Sparkler',xp:430,accessories:{head:'cap'}});
+ const audit=(await h.gm({action:'audit',account:h.target().account})).data.entries.find(e=>e.action==='pet:replace');
+ assert.equal(audit.previous.pet.id,'dragon');
+ assert.equal(audit.updated.pet.id,'owl');
+ assert.equal(audit.previous.pet.xp,audit.updated.pet.xp);
+});
+
+test('A high-score repair clears only the selected stage snapshot or pack/world record',async t=>{
+ const h=await setup(t);
+ const data=h.b.data.data, p=data.profiles.ari;
+ const run=newRun('ari','earth-science',{},77), other=newRun('ari','earth-science',{theme:'cosmic'},78);
+ run.score=90; run.distance=200; run.crystals=23; other.score=80;
+ const story=originalCourse(p,'ari','earth-science','volcano',0);
+ story.ledger.score=300; story.progress.run.score=300;
+ p.runs={'earth-science':run};
+ p.courses={'earth-science~volcano':run};
+ p.stageCourses={'earth-science~volcano~0':run,'earth-science~cosmic~0':other};
+ p.levelProgress={'earth-science':{completed:false,dust:0,xpDust:0,worlds:{
+  volcano:{stages:1,finishes:0,bestScore:90,stageIds:[0]},cosmic:{stages:1,finishes:0,bestScore:80,stageIds:[0]},
+ }}};
+ p.learning={'earth-science':{questions:{},concepts:{},latest:'synthetic study history'}};
+ p.highScore=350; p.crystals=23;
+ h.env.DB.db.prepare('UPDATE explorers SET payload=? WHERE id=?').run(JSON.stringify(data),h.target().account);
+ const apply=(change,revision)=>h.gm(h.change({type:'high-score-reset',...change},revision));
+ assert.equal((await apply({courseField:'stageCourses',courseKey:'earth-science~volcano~0'},0)).status,200);
+ const load=async()=>(await h.gm({action:'detail',account:h.target().account})).data.data.profiles.ari;
+ let result=await load();
+ assert.equal(result.stageCourses['earth-science~volcano~0'].score,0);
+ assert.equal(result.stageCourses['earth-science~volcano~0'].distance,200);
+ assert.equal(result.stageCourses['earth-science~volcano~0'].crystals,23);
+ assert.equal(result.courses['earth-science~volcano'].score,0);
+ assert.equal(result.runs['earth-science'].score,0);
+ assert.equal(result.stageCourses['earth-science~cosmic~0'].score,80);
+ assert.equal(result.originalCourses['earth-science~volcano~0'].ledger.score,300);
+ assert.equal(result.levelProgress['earth-science'].worlds.volcano.bestScore,90);
+ assert.equal((await apply({courseField:'originalCourses',courseKey:'earth-science~volcano~0'},1)).status,200);
+ assert.equal((await apply({packId:'earth-science',world:'volcano'},2)).status,200);
+ result=await load();
+ assert.equal(result.originalCourses['earth-science~volcano~0'].ledger.score,0);
+ assert.equal(result.originalCourses['earth-science~volcano~0'].progress.run.score,0);
+ assert.equal(result.levelProgress['earth-science'].worlds.volcano.bestScore,0);
+ assert.equal(result.levelProgress['earth-science'].worlds.cosmic.bestScore,80);
+ assert.deepEqual(result.levelProgress['earth-science'].worlds.volcano.stageIds,[0]);
+ assert.equal(result.highScore,350);
+ assert.equal(result.crystals,23);
+ assert.deepEqual(result.learning,p.learning);
+});
+
+test('Verified account snapshots guard destructive reset and restore with account isolation and existing sessions',async t=>{
+ const h=await setup(t);
+ const account=h.target().account, username=h.b.data.account.username;
+ const create=(revision,extra={})=>({action:'snapshot-create',requestId:crypto.randomUUID(),confirmed:true,
+  reason:'Verified safety backup',account,username,revision,...extra});
+ const read=async()=> (await h.call('me',null,h.child)).data;
+ const apply=(change,revision)=>h.gm(h.change(change,revision));
+ const save=async (revision) => {
+  const response=await h.gm(create(revision));
+  assert.equal(response.status,200,JSON.stringify(response.data));
+  assert.equal(response.data.snapshot.current,true);
+  return response.data.snapshot;
+ };
+ assert.equal((await h.gm(create(0),h.child)).status,403);
+ assert.equal((await h.gm(create(0,{username:'mismatch'}))).status,400);
+ assert.equal((await apply({type:'reward',crystals:250,pet:'fox'},0)).status,200);
+ const current=await read();
+ const p=current.data.profiles.ari;
+ purchase(p,'food','apple');
+ p.learning['earth-science']={questions:{},concepts:{},latest:'saved study progress'};
+ assert.equal((await h.call('save',{requestId:'synthetic-food-purchase',revision:1,data:current.data},h.child)).status,200);
+ const beforeBadge=await save(2);
+ const mint=await h.gm({action:'badge-save',requestId:crypto.randomUUID(),confirmed:true,name:'Reward to recover',
+  description:'Synthetic badge for restore testing.',icon:'star',rarity:'RARE',active:true});
+ const badge=mint.data.badge;
+ assert.equal((await apply({type:'badge',id:badge.id,version:1},2)).status,200);
+ assert.equal((await apply({type:'account-reset',username,snapshotId:beforeBadge.id},2)).status,409);
+ const prior=await save(2);
+ const downloaded=await h.gm({action:'snapshot-download',account,id:prior.id});
+ assert.equal(downloaded.status,200);
+ assert.equal(downloaded.data.format,'crystal-quest-verified-snapshot-v1');
+ assert.deepEqual(Object.keys(downloaded.data.data.profiles),['emberia','luminara']);
+ assert.equal(downloaded.data.data.profiles.emberia.collection.wallet,240);
+ assert.equal(downloaded.data.badges[0][1],badge.id);
+ assert.doesNotMatch(JSON.stringify(downloaded.data),/pin_hash|recovery_hash|cq_session/);
+ assert.equal((await h.gm({action:'snapshot-download',account:h.a.data.account.id,id:prior.id})).status,404);
+
+ assert.equal((await apply({type:'wallet',operation:'add',amount:50},2)).status,200);
+ assert.equal((await apply({type:'account-reset',username,snapshotId:prior.id},3)).status,409);
+ const safetyBody=create(3), safetyRes=await h.gm(safetyBody);
+ assert.equal(safetyRes.status,200);
+ const safety=safetyRes.data.snapshot;
+ assert.equal((await h.gm(safetyBody)).data.duplicate,true);
+ const reset=h.change({type:'account-reset',username,snapshotId:safety.id},3);
+ assert.equal((await h.gm({...reset,change:{...reset.change,username:'wrong'}})).status,400);
+ assert.equal((await h.gm(reset)).status,200);
+ assert.equal((await h.gm(reset)).data.duplicate,true);
+ const empty=await read();
+ assert.equal(empty.account.id,account);
+ assert.equal(empty.revision,4);
+ assert.equal(empty.data.profiles.ari.crystals,0);
+ assert.equal(empty.data.profiles.ari.collection,undefined);
+ assert.deepEqual(empty.data.profiles.ari.learning,{});
+ assert.equal(empty.data.profiles.ari.economyEvents[0].kind,'purchase');
+ assert.deepEqual((await h.call('collectible-badges',{profile:'emberia'},h.child)).data.badges,[]);
+ assert.equal((await h.call('save',{requestId:'stale-after-reset',revision:3,data:current.data},h.child)).status,409);
+
+ const clean=await save(4);
+ const restore=h.change({type:'snapshot-restore',username,snapshotId:prior.id,safetySnapshotId:clean.id},4);
+ assert.equal((await h.gm(restore)).status,200);
+ const restored=await read(), restoredProfile=restored.data.profiles.ari;
+ assert.equal(restored.account.id,account);
+ assert.equal(restored.revision,5);
+ assert.equal(restoredProfile.collection.wallet,240);
+ assert.equal(restoredProfile.collection.pets[0].species,'fox');
+ assert.equal(restoredProfile.learning['earth-science'].latest,'saved study progress');
+ assert.equal(restoredProfile.economyEvents[0].kind,'purchase');
+ assert.equal((await h.call('collectible-badges',{profile:'emberia'},h.child)).data.badges[0].id,badge.id);
+ const oldSnapshots=(await h.gm({action:'snapshots',account})).data.snapshots;
+ assert.equal(oldSnapshots.length,4);
+ assert.equal(oldSnapshots.some(s=>s.current),false);
+ const audit=(await h.gm({action:'audit',account})).data.entries;
+ assert.equal(audit.filter(e=>e.action==='account-reset').length,1);
+ assert.equal(audit.find(e=>e.action==='snapshot-restore').updated.restoredSnapshotId,prior.id);
+});
+
+test('Snapshot integrity failure prevents downloads and account reset',async t=>{
+ const h=await setup(t), account=h.target().account, username=h.b.data.account.username;
+ const creation=await h.gm({action:'snapshot-create',requestId:crypto.randomUUID(),confirmed:true,reason:'Safety backup',
+  account,username,revision:0});
+ assert.equal(creation.status,200);
+ const id=creation.data.snapshot.id;
+ h.env.DB.db.prepare("UPDATE game_master_snapshots SET payload='{}' WHERE id=?").run(id);
+ assert.equal((await h.gm({action:'snapshot-download',account,id})).status,409);
+ const reset=await h.gm(h.change({type:'account-reset',username,snapshotId:id}));
+ assert.equal(reset.status,409);
+ assert.equal((await h.call('me',null,h.child)).data.revision,0);
+});
+
+test('Game Master reports are isolated, read-only, and contain coverage and homework counts without answer keys',async t=>{
+ const h=await setup(t), account=h.target().account, data=h.b.data.data, player=data.profiles.ari;
+ assignLevel(data,'ari','patterns-sky',false);
+ player.levels.find(level=>level.packId==='patterns-sky').archived=true;
+ const pack=data.packs['earth-science'], study=history(data,'ari',pack.id);
+ study.sessions=2; study.lastSession='2026-10-01T16:00:00Z';
+ const [q1,q2]=pack.questions;
+ presentRecord(study,q1); answerRecord(study,q1,true,0);
+ presentRecord(study,q2); answerRecord(study,q2,false,0); answerRecord(study,q2,true,1);
+ player.journeys={runner:{volcano:{completed:[0,1]}},original:{volcano:{completed:[0]}}};
+ player.levelProgress={'earth-science':{completed:false,dust:0,xpDust:0,worlds:{volcano:{stages:2,finishes:0,bestScore:510,stageIds:[0,1]}}}};
+ player.lastAdventure={mode:'runner',world:'volcano',stage:1,packId:'earth-science'};
+
+ const readCase=readingFixture();
+ assignHomework(data,'ari',readCase);
+ const current=caseState(ensureHomework(data,'ari'),readCase);
+ current.written.q1={selfReported:true,at:'2026-10-02T16:00:00Z'};
+ h.env.DB.db.prepare('UPDATE explorers SET payload=? WHERE id=?').run(JSON.stringify(data),account);
+ const publish=await h.call('reading-publish',{confirmed:true,pack:{...readCase,title:'Waiting to start'},account,profile:'ari'});
+ assert.equal(publish.status,403);
+ await h.gm({action:'list'});
+ assert.equal((await h.call('reading-publish',{confirmed:true,pack:{...readCase,title:'Waiting to start'},account,profile:'ari'})).status,200);
+
+ const body={action:'progress-report',account,profile:'emberia'};
+ assert.equal((await h.gm(body,h.child)).status,403);
+ assert.equal((await h.gm({...body,profile:'ari'})).status,400);
+ assert.equal((await h.gm({...body,packId:'missing-test'})).status,404);
+ const result=await h.gm(body);
+ assert.equal(result.status,200,JSON.stringify(result.data));
+ const report=result.data;
+ assert.deepEqual([report.coverage.attempted,report.coverage.firstCorrect,report.coverage.accuracy,report.coverage.assessedConcepts,report.coverage.sessions],[2,1,50,2,2]);
+ assert.equal(report.coverage.lastSession,Date.parse(study.lastSession));
+ assert.equal(report.missed[0].incorrect,1);
+ assert.ok(report.missed[0].review>0);
+ assert.equal(report.homework.active,readCase.id);
+ assert.deepEqual(report.homework.cases[0].missions[0],{id:'q1',number:1,written:true});
+ assert.equal(report.homework.cases[0].written,1);
+ assert.equal(report.homework.cases[1].title,'Waiting to start');
+ assert.equal(report.homework.cases[1].attempts,0);
+ const volcano=report.worlds.find(w=>w.id==='volcano');
+ assert.deepEqual(volcano.runnerCompleted,[0,1]);
+ assert.deepEqual(volcano.originalCompleted,[0]);
+ assert.deepEqual(volcano.packStagesCompleted,[0,1]);
+ assert.equal(volcano.bestScore,510);
+ assert.deepEqual(report.location,player.lastAdventure);
+ assert.doesNotMatch(JSON.stringify(report),/"(?:answer|answers|choices|keywordGroups|evidence|explanation|pin_hash|recovery_hash|cq_session)"/);
+ const archive=(await h.gm({...body,packId:'patterns-sky'})).data;
+ assert.equal(archive.pack.archived,true);
+ assert.equal(archive.coverage.accuracy,null);
+ const other=(await h.gm({...body,profile:'luminara'})).data;
+ assert.equal(other.pack.id,'patterns-sky');
+ assert.equal(other.coverage.attempted,0);
+ assert.deepEqual(other.homework.cases,[]);
+ assert.equal((await h.call('me',null,h.child)).data.revision,0);
+ assert.equal((await h.gm({action:'audit',account})).data.entries.length,0);
 });

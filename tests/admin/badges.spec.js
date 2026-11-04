@@ -9,8 +9,9 @@ test('owner creates, grants and retires a badge; only its recipient identity see
  const post=(context,route,data,headers={})=>context.request.post('/api/'+route,{data,headers:{Origin:baseURL,...headers}});
  const suffix=Date.now().toString(36);
  const accounts=[];
+ const signupIP='192.0.2.'+(20+test.info().workerIndex%200);
  const signup=async(context,role)=>{
-  const result=await post(context,'signup',{username:'qa_badge_'+role+'_'+suffix,pin:'5682'},{'CF-Connecting-IP':'198.51.100.'+(test.info().workerIndex+1)});
+  const result=await post(context,'signup',{username:'qa_badge_'+role+'_'+suffix,pin:'5682'},{'CF-Connecting-IP':signupIP});
   expect(result.ok(),await result.text()).toBe(true);
   const account=(await result.json()).account;
   accounts.push(account);

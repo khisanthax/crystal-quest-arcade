@@ -34,7 +34,7 @@ p { color: var(--muted); }
 .status { margin: 0; min-height: 1.5em; color: var(--accent); overflow-wrap: anywhere; }
 .status:empty { display: none; }
 .status:not(:empty) { padding: .5rem 0; }
-.status.error, #review-error { color: #ffb6b5; }
+.status.error, #review-error, .form-error { color: #ffb6b5; }
 button, .button, input, select, textarea {
   font: inherit; min-height: 2.8rem; border-radius: .6rem; border: 1px solid var(--line);
 }
@@ -45,6 +45,7 @@ button, .button {
 button:disabled { opacity: .55; cursor: wait; }
 button[aria-pressed="true"] { background: #393f62; border-color: var(--accent); color: var(--accent); }
 .primary { background: var(--accent); border-color: var(--accent); color: #102b2b; }
+.danger { background: #ffb6b5; border-color: #ffb6b5; color: #391921; }
 :focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
 input, select, textarea { width: 100%; padding: .45rem .65rem; color: var(--ink); background: #191c31; }
 input[type="checkbox"] { width: 1.4rem; min-height: 1.4rem; margin: 0; accent-color: var(--accent); }
@@ -66,8 +67,27 @@ select, textarea { max-width: 100%; }
 small { color: var(--muted); }
 .workshop label:has(input[type="checkbox"]) { display: flex; align-items: center; gap: .55rem; }
 fieldset { border: 1px solid var(--line); border-radius: .6rem; margin: .75rem 0; }
+@media (min-width: 921px) and (max-width: 1120px) {
+  #sections { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+@media (min-width: 761px) and (max-width: 920px) {
+  #sections { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
 @media (max-width: 760px) {
   .workspace { grid-template-columns: 1fr; }
   #sections { grid-template-columns: repeat(2, 1fr); }
   #player-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+.report-filters { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: .55rem; }
+.report-stats {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .55rem;
+  margin: .65rem 0;
+}
+.report-stats > div { background: #191c31; padding: .6rem .75rem; border-radius: .6rem; }
+.report-stats dt { color: var(--muted); font-size: .9rem; }
+.report-stats dd { margin: .15rem 0 0; font-weight: 750; overflow-wrap: anywhere; }
+#work details > summary { min-height: 2.8rem; padding: .6rem 0; cursor: pointer; font-weight: 700; }
+@media (max-width: 520px) {
+  .report-filters { grid-template-columns: 1fr; gap: 0; }
+  .report-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }

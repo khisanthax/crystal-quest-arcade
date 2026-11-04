@@ -15,9 +15,27 @@ test('both third-person worlds render, run automatically, accept smooth swipes, 
 
 async function steer(p,lane){const r=(await state(p)).run;for(let i=r.player.lane;i<lane;i++)await p.keyboard.press('ArrowRight');for(let i=r.player.lane;i>lane;i--)await p.keyboard.press('ArrowLeft');}
 async function seed(p,data){await p.addInitScript(({key,data})=>{if(!localStorage.getItem(key))localStorage.setItem(key,JSON.stringify(data));},{key:KEY,data});}
-for(const id of ['ari','kal'])test(id+' completes a full three-stage runner through real controls and questions',async({page},info)=>{
- const d=freshData();d.profiles[id].settings.interval=2;await seed(page,d);await start(page,id);let won=false,questions=0,stages=new Set();
- for(let i=0;i<1800;i++){const s=await state(page);if(s.mode==='victory'){won=true;break;}if(s.mode==='question'){questions++;await answer(page);continue;}if(s.mode==='reward'){await page.locator('[data-reward="blast"]').tap();continue;}if(s.mode==='stage'){stages.add(s.run.stage);await page.locator('#next-stage').tap();continue;}expect(s.mode).toBe('play');const next=s.run.groups.find(g=>!g.passed);if(next)await steer(page,next.safe);await page.clock.runFor(300);}
+for(const id of ['ari','kal'])test(`${id==='ari'?'Emberia':'Luminara'} completes a full three-stage runner through real controls and questions`,async({page},info)=>{
+ // A short landscape viewport and reduced motion keep software WebGL responsive for this long playthrough.
+ await page.setViewportSize({width:844,height:390});
+ await page.emulateMedia({reducedMotion:'reduce'});
+ const d=freshData();d.profiles[id].settings.interval=2;await seed(page,d);await start(page,id);await page.clock.pauseAt(new Date(Date.now()+1000));let won=false,questions=0,stages=new Set();
+ for(let i=0;i<900;i++){
+  const s=await page.evaluate(()=>{
+   const {mode,run}=window.crystalQuest;
+   return {mode,stage:run.stage,lane:run.player.lane,safe:run.groups.find(g=>!g.passed)?.safe};
+  });
+  if(s.mode==='victory'){won=true;break;}
+  if(s.mode==='question'){questions++;await answer(page);continue;}
+  if(s.mode==='reward'){await page.locator('[data-reward="blast"]').tap();continue;}
+  if(s.mode==='stage'){stages.add(s.stage);await page.locator('#next-stage').tap();continue;}
+  expect(s.mode).toBe('play');
+  if(s.safe!==undefined){
+   for(let lane=s.lane;lane<s.safe;lane++)await page.keyboard.press('ArrowRight');
+   for(let lane=s.lane;lane>s.safe;lane--)await page.keyboard.press('ArrowLeft');
+  }
+  await page.clock.runFor(650);
+ }
  expect(won).toBe(true);expect([...stages]).toEqual([0,1,2]);expect(questions).toBeGreaterThanOrEqual(12);const s=await state(page);expect(s.run.crystals).toBeGreaterThan(0);expect(s.data.profiles[id].rewards.filter(r=>r.kind==='stage')).toHaveLength(3);expect(s.data.profiles[id].sessions).toBe(1);await page.screenshot({path:`artifacts/crystal-runner-victory-${id}-${info.project.name}.png`});await page.reload();await page.locator('#choose-'+id).tap();await page.locator('#continue-adventure').tap();expect((await state(page)).mode).toBe('victory');
 });
 

@@ -1,4 +1,6 @@
 import {ACCESSORIES, FOOD, PETS, collection, petLevel} from '../dist/runner/collection.js';
+import {progressReport} from './game-master-reports.js';
+import {badgeStampSql,fullAccountChange,snapshotAction} from './game-master-snapshots.js';
 import {badgeView,listBadges,playerBadges,saveBadge} from './game-master-badges.js';
 import {exportBackup} from '../dist/runner/store.js';
 import {assignLevel, archiveLevel} from '../dist/runner/levels.js';
@@ -61,6 +63,7 @@ async function editPet(p, change, db, target, fail) {
  if (!type) fail(400,'Choose a pet from the catalog.');
  const existing = c.pets.find(pet => pet.id === type.id);
  const previous = {pet:existing ? structuredClone(existing) : null, equipped:c.equipped};
+ let updatedId = type.id;
  const {operation} = change;
  if (operation === 'grant' || operation === 'restore') {
   if (existing) fail(409,'This player already owns that pet.');
@@ -79,6 +82,17 @@ async function editPet(p, change, db, target, fail) {
   if (operation === 'revoke') {
    c.pets = c.pets.filter(pet => pet !== existing);
    if (c.equipped === existing.id) c.equipped = null;
+  } else if (operation === 'replace') {
+   const replacement = PETS.find(pet => pet.id === change.replacement);
+   if (!replacement || replacement.id === existing.id) fail(400,'Choose a different pet from the catalog.');
+   if (c.pets.some(pet => pet.id === replacement.id)) fail(409,'This player already owns the replacement pet.');
+   const accessories = Object.fromEntries(Object.entries(existing.accessories).filter(([slot,id]) =>
+    c.accessories.includes(id) && ACCESSORIES.some(item => item.id === id && item.slot === slot && item.level <= petLevel(existing.xp))));
+   const name = existing.name === type.name ? replacement.name : existing.name;
+   const pet = {id:replacement.id,species:replacement.id,name,xp:existing.xp,accessories};
+   c.pets[c.pets.indexOf(existing)] = pet;
+   if (c.equipped === existing.id) c.equipped = pet.id;
+   updatedId = pet.id;
   } else if (operation === 'xp') {
    existing.xp = amount(change.xp,0,6000,fail);
    for (const [slot,id] of Object.entries(existing.accessories)) {
@@ -86,7 +100,7 @@ async function editPet(p, change, db, target, fail) {
    }
   } else fail(400,'Choose a pet action.');
  }
- return {previous,updated:{pet:c.pets.find(pet => pet.id === type.id) ?? null,equipped:c.equipped}};
+ return {previous,updated:{pet:c.pets.find(pet => pet.id === updatedId) ?? null,equipped:c.equipped}};
 }
 
 function editItem(p, change, fail) {
@@ -108,6 +122,48 @@ function editItem(p, change, fail) {
   }
  }
  return {previous:{item,quantity:old},updated:{item,quantity:next}};
+}
+
+const runnerCourseFields = ['stageCourses','courses','runs'];
+
+function savedCourse(p,{courseKey,courseField},fail) {
+ const fields = [...runnerCourseFields,'originalCourses'];
+ const matches = fields.filter(field => (!courseField || courseField === field) && has(p[field],courseKey));
+ if (matches.length !== 1) fail(404,'Choose one saved course.');
+ const field = matches[0], saved = p[field][courseKey];
+ const ledger = field === 'originalCourses' ? saved.ledger : saved;
+ return {field,saved,ledger};
+}
+
+function sameRunnerStage(left,right) {
+ if (left.stage !== right.stage || left.packId !== right.packId || left.theme !== right.theme) return false;
+ if (left.sessionId && right.sessionId) return left.sessionId === right.sessionId;
+ return Number.isFinite(left.seed) && left.seed === right.seed;
+}
+
+function resetCourseScore(p,change,fail) {
+ if (change.courseKey !== undefined) {
+  const {field,saved,ledger} = savedCourse(p,change,fail);
+  const context = {courseField:field,courseKey:change.courseKey,packId:ledger.packId,world:ledger.theme,stage:ledger.stage};
+  const previous = {...context,score:ledger.score};
+  const activeAdventure = field === 'originalCourses' && saved.progress.run?.level === ledger.stage ? saved.progress.run : null;
+  if (activeAdventure) {
+   previous.playScore = activeAdventure.score;
+   activeAdventure.score = 0;
+  }
+  ledger.score = 0;
+  if (field !== 'originalCourses') {
+   for (const source of runnerCourseFields) for (const run of Object.values(p[source] || {})) {
+    if (sameRunnerStage(run,ledger)) run.score = 0;
+   }
+  }
+  return {previous,updated:{...context,score:0,...(activeAdventure ? {playScore:0} : {})}};
+ }
+ const {packId,world} = change;
+ if (!has(p.levelProgress,packId) || !has(p.levelProgress[packId]?.worlds,world)) fail(404,'Choose a study pack and world with a recorded high score.');
+ const record = p.levelProgress[packId].worlds[world], previous = {packId,world,bestScore:record.bestScore};
+ record.bestScore = 0;
+ return {previous,updated:{packId,world,bestScore:0}};
 }
 
 async function editProfile({db,data,target,change,fail}) {
@@ -145,21 +201,18 @@ async function editProfile({db,data,target,change,fail}) {
   for (const edit of edits) { Object.assign(previous,edit.previous); Object.assign(updated,edit.updated); }
   return {previous,updated};
  }
+ case 'high-score-reset': return resetCourseScore(p,change,fail);
  case 'run-reset': {
   const {courseKey} = change;
-  const fields = ['stageCourses','originalCourses','courses','runs'];
-  const match = fields.filter(field => (!change.courseField || change.courseField === field) && has(p[field],courseKey));
-  if (match.length !== 1) fail(404,'Choose a saved course to reset.');
-  const run = p[match[0]][courseKey];
-  const ledger = run.ledger || run;
-  const previous = {courseKey,collection:match[0],stage:ledger.stage,world:ledger.theme};
+  const {field,ledger} = savedCourse(p,change,fail);
+  const previous = {courseKey,collection:field,stage:ledger.stage,world:ledger.theme};
   // A runner snapshot may also be reachable from older continue buttons.
   for (const field of ['stageCourses','courses','runs']) {
    for (const [key,value] of Object.entries(p[field] || {})) {
     if (ledger.sessionId && value.sessionId === ledger.sessionId && value.stage === ledger.stage) delete p[field][key];
    }
   }
-  delete p[match[0]][courseKey];
+  delete p[field][courseKey];
   return {previous,updated:{courseKey,reset:true}};
  }
  case 'stage-status': {
@@ -287,6 +340,9 @@ export async function gameMasterAction(body, {db,a,env,fail,response,checkedData
   if (!account) fail(404,'Explorer not found.');
   return account;
  };
+ if (['snapshots','snapshot-create','snapshot-download'].includes(body.action)) {
+  return snapshotAction(body,{db,a,env,fail,response,randomToken,digest,signature:gameMasterSignature,checkedData,requestGate});
+ }
  if (body.action === 'badges') return response(await listBadges(db));
  if (body.action === 'badge-save') return saveBadge(body,{db,a,env,fail,response,randomToken,signature:gameMasterSignature,requestGate});
  if (body.action === 'packages') {
@@ -306,6 +362,7 @@ export async function gameMasterAction(body, {db,a,env,fail,response,checkedData
   return response({target,username:player.username,draw:{until,nonce,signature}});
  }
  if (body.action === 'list') return response({players:(await accounts()).map(x => overview(x)),catalog});
+ if (body.action === 'progress-report') return response(await progressReport(db,await requireAccount(body.account),body,fail));
  if (body.action === 'detail') {
   const account = await requireAccount(body.account);
   const backups = (await db.prepare('SELECT revision,created FROM save_history WHERE account_id=? ORDER BY revision DESC LIMIT 30').bind(account.id).all()).results;
@@ -368,7 +425,8 @@ export async function gameMasterAction(body, {db,a,env,fail,response,checkedData
  }
  const records = new Map(), seen = new Set(), audits = [];
  let recovery;
- const accountAction = change.type === 'account';
+ const fullChange = ['account-reset','snapshot-restore'].includes(change.type);
+ const accountAction = change.type === 'account' || fullChange;
  const singleTarget = accountAction || change.type === 'restore';
  if (change.type === 'wallet' && change.operation === 'reverse' && targets.length !== 1) fail(400,'Choose one adjustment to reverse.');
  if (singleTarget && targets.length !== 1) fail(400,'Choose one explorer for this action.');
@@ -390,7 +448,13 @@ export async function gameMasterAction(body, {db,a,env,fail,response,checkedData
    fail(409,'This explorer has a newer save. Reload the player and preview the change again.');
   }
   let edit;
-  if (change.type === 'restore') {
+  if (fullChange) {
+   const result = await fullAccountChange({db,account,change,fail,digest,checkedData});
+   record.data = result.data;
+   record.badges = result.badges;
+   record.badgeStamp = result.badgeStamp;
+   edit = {previous:result.previous,updated:result.updated};
+  } else if (change.type === 'restore') {
    const backup = await db.prepare('SELECT payload FROM save_history WHERE account_id=? AND revision=?').bind(account.id,amount(change.revision,0,account.revision,fail)).first();
    if (!backup) fail(404,'That backup revision is unavailable.');
    const saved = checkedData(JSON.parse(backup.payload));
@@ -454,6 +518,10 @@ export async function gameMasterAction(body, {db,a,env,fail,response,checkedData
  const result = {applied:true,revisions};
  const guards = [...records.values()].map(() => 'EXISTS (SELECT 1 FROM explorers WHERE id=? AND revision=?)');
  const snapshots = [...records.values()].flatMap(({account}) => [account.id,account.revision]);
+ if (fullChange) for (const {account,badgeStamp} of records.values()) {
+  guards.push(badgeStampSql+'=?');
+  snapshots.push(account.id,badgeStamp);
+ }
  if (draw) {
   guards.push("NOT EXISTS (SELECT 1 FROM game_master_audit WHERE json_extract(updated,'$.randomDraw')=?)");
   snapshots.push(draw.nonce);
@@ -483,6 +551,11 @@ export async function gameMasterAction(body, {db,a,env,fail,response,checkedData
   batch.push(db.prepare('UPDATE explorers SET payload=?,revision=revision+1'+extra+' WHERE id=? AND '+requestGate)
    .bind(JSON.stringify(data),...Object.values(columns),account.id,requestId,marker));
   if (revoke) batch.push(db.prepare('DELETE FROM sessions WHERE account_id=? AND '+requestGate).bind(account.id,requestId,marker));
+ }
+ if (fullChange) for (const {account,badges} of records.values()) {
+  batch.push(db.prepare('DELETE FROM player_badges WHERE account_id=? AND '+requestGate).bind(account.id,requestId,marker));
+  if (badges.length) batch.push(db.prepare("INSERT INTO player_badges (account_id,profile,badge_id,awarded) SELECT ?,json_extract(value,'$[0]'),json_extract(value,'$[1]'),json_extract(value,'$[2]') FROM json_each(?) WHERE "+requestGate)
+   .bind(account.id,JSON.stringify(badges),requestId,marker));
  }
  for (const {target,edit,action} of audits) {
   batch.push(db.prepare('INSERT INTO game_master_audit (request_id,actor,account_id,profile,action,reason,previous,updated,created) SELECT ?,?,?,?,?,?,?,?,? WHERE '+requestGate)

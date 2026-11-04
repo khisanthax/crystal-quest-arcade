@@ -36,6 +36,13 @@
       "when": 1793700000004,
       "tag": "0004_collectible_badges",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1793700000005,
+      "tag": "0005_verified_snapshots",
+      "breakpoints": true
     }
   ]
 }
