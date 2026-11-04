@@ -8,9 +8,9 @@ export async function isReadingAdmin(db,id){return !!await db.prepare('SELECT 1 
 function learnerCopy(p){
  return {schemaVersion:1,id:p.id,title:p.title,published:true,paragraphs:p.paragraphs.map(a=>({id:a.id,text:a.text,page:a.page,illustration:a.illustration,mainIdea:{prompt:a.mainIdea.prompt,choices:a.mainIdea.choices}})),questions:p.questions.map(q=>({id:q.id,text:q.text,worksheet:q.worksheet&&{type:q.worksheet.type,choices:q.worksheet.choices},reflection:q.reflection&&{prompt:q.reflection.prompt,choices:q.reflection.choices}}))};
 }
-export async function readingAction(path,body,{db,a,unlocked=true,fail,response}){
+export async function readingAction(path,body,{db,a,unlocked=false,setupRequired=false,fail,response}){
  const admin=a?await isReadingAdmin(db,a.id):false;
- if(path==='/api/reading-access')return response({admin:admin&&unlocked,locked:admin&&!unlocked});
+ if(path==='/api/reading-access')return response({admin:admin&&unlocked,locked:admin&&!unlocked,...(admin&&setupRequired?{setupRequired:true}:{})});
  if(path==='/api/reading-library'){
   if(!['ari','kal'].includes(body.profile))fail(400,'Choose a player.');
   const rows=(await db.prepare('SELECT payload FROM reading_publications WHERE account_id=? AND profile=? ORDER BY published DESC').bind(a.id,body.profile).all()).results;
@@ -37,7 +37,7 @@ export async function readingAction(path,body,{db,a,unlocked=true,fail,response}
   fail(400,'Unknown homework check.');
  }
  if(!admin)fail(403,'Only the designated administrator can open this workshop.');
- if(!unlocked)fail(403,'Unlock Game Master before opening this workshop.');
+ if(!unlocked)fail(403,setupRequired?'Configure the owner access key to use this workshop.':'Unlock Game Master before opening this workshop.');
  if(path==='/api/reading-admin'){
   const players=(await db.prepare('SELECT id,username FROM explorers ORDER BY username').all()).results;
   const published=(await db.prepare('SELECT id,account_id,profile,payload,published FROM reading_publications ORDER BY published DESC').all()).results.map(({payload,...r})=>({...r,title:JSON.parse(payload).title}));

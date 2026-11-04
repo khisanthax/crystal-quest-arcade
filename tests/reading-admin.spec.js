@@ -1,16 +1,24 @@
 import {test,expect} from '@playwright/test';
 import {readFile} from 'node:fs/promises';
-import {DatabaseSync} from 'node:sqlite';
+import {unlockGameMaster} from './reading/admin-fixture.mjs';
 import {readingFixture} from './reading/fixture.mjs';
 import {keywordStep,proveQuestion,paperMission} from './reading/guided-browser.mjs';
 test('administrator form publishes durable assigned homework; child cannot read drafts, answer keys, or publish',async({page,browser,baseURL},info)=>{
+ test.skip(!process.env.CQ_GAME_MASTER_TEST_KEY,'Owner access is disabled in this test run.');
  test.setTimeout(100000);const key=(await readFile('.local/maintenance-key','utf8')).trim(),accounts=[];
- const db=new DatabaseSync(process.env.CQ_DB_PATH||'.local/explorers.sqlite');db.exec('DELETE FROM attempt_limits');db.close();
  const child=await browser.newContext({baseURL,hasTouch:true,viewport:{width:1180,height:820}});const cp=await child.newPage();
- const post=(context,path,data)=>context.request.post('/api/'+path,{headers:{Origin:baseURL},data});
- async function signup(context,kind){const username='qa_'+kind+'_'+Date.now().toString(36),r=await post(context,'signup',{username,pin:'5682'});expect(r.ok()).toBe(true);const a=(await r.json()).account;accounts.push(a);return a;}
+ const post=(context,path,data,headers={})=>context.request.post('/api/'+path,{headers:{Origin:baseURL,...headers},data});
+ async function signup(context,kind){const username='qa_'+kind+'_'+Date.now().toString(36),r=await post(context,'signup',{username,pin:'5682'},{'CF-Connecting-IP':'203.0.113.42'});expect(r.ok(),await r.text()).toBe(true);const a=(await r.json()).account;accounts.push(a);return a;}
  try{
   const teacher=await signup(page.context(),'teacher');const learner=await signup(child,'reader');const set=await page.request.post('/api/admin',{headers:{Origin:baseURL,'x-cq-admin-key':key},data:{action:'designate-reading-admin',username:teacher.username}});expect(set.ok()).toBe(true);
+  expect((await post(page.context(),'reading-admin',{})).status()).toBe(403);
+  const lockedSave=await (await page.request.get('/api/me')).json();
+  lockedSave.data.packs['earth-science'].title='Owner still locked';
+  expect((await post(page.context(),'save',{data:lockedSave.data,revision:lockedSave.revision,requestId:'locked-study-edit'})).status()).toBe(403);
+  await page.goto('/');await page.locator('#choose-ari').tap();await page.locator('#reading-play').tap();await page.locator('#new-case').tap();
+  await expect(page.getByRole('heading',{name:'Unlock Game Master'})).toBeVisible();
+  await page.getByRole('link',{name:'Open Game Master'}).tap();
+  await unlockGameMaster(page,false);
   await page.goto('/');await page.locator('#choose-ari').tap();await page.locator('#reading-play').tap();await page.locator('#new-case').tap();await expect(page.getByRole('heading',{name:'Homework Workshop'})).toBeVisible();
   const pack=readingFixture();pack.questions[0].worksheet={type:'multiple_choice',choices:['They grow quickly','They sing'],answer:0};await page.locator('#homework-file').setInputFiles({name:'qa-worksheet.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(pack))});await expect(page.getByLabel('Assignment title')).toHaveValue(pack.title);await page.getByLabel('Assignment title').fill('Published garden investigation');await page.locator('#question-0').fill('Why did Mira choose beans to plant?');await page.locator('#main-choice-0-0').fill('Planting a garden');await page.locator('#paragraph-0').fill(pack.paragraphs[0].text+' She wrote a note.');await page.locator('#paragraph-0').blur();await expect(page.locator('#evidence-0-0')).toHaveValue('');await page.locator('#evidence-0-0').selectOption('0:1:1');await page.locator('#evidence-1-0').selectOption('0:0:0');await page.locator('#answer-0-1').fill('They grow in the library');await page.locator('#answer-key-0').selectOption('0');await page.locator('#reading-assignee').selectOption(learner.id);await page.getByRole('button',{name:'Accept & Publish'}).tap();await expect(page.locator('#publish-status')).toContainText('Confirm');await page.locator('#confirm-transcription').check();await page.screenshot({path:`artifacts/reading-final-admin-${info.project.name}.png`});await page.getByRole('button',{name:'Accept & Publish'}).tap();await expect(page.locator('#admin-status')).toContainText('Published garden investigation published');
   expect((await post(child,'reading-admin',{})).status()).toBe(403);expect((await post(child,'reading-publish',{pack,confirmed:true,account:learner.id,profile:'ari'})).status()).toBe(403);expect((await post(child,'admin',{action:'designate-reading-admin',username:learner.username})).status()).toBe(403);const snapshot=await(await cp.request.get('/api/me')).json();snapshot.data.packs['earth-science'].title='Unauthorized change';expect((await post(child,'save',{data:snapshot.data,revision:snapshot.revision,requestId:'deny-study-edit'})).status()).toBe(403);expect((await post(child,'migrate',{data:snapshot.data,revision:snapshot.revision,requestId:'deny-study-import',confirmed:true})).status()).toBe(403);

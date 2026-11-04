@@ -2,7 +2,7 @@
 
 Sign in to the designated administrator Explorer account in Crystal Quest Arcade, then open `/admin` on the same site. Enter the separate owner key to unlock the dashboard. The normal player PIN does not unlock administrative controls. The owner key stays in page memory. Unlocking also sets a session-bound, 20-minute cookie so the Homework Workshop can check the same owner session. Use **Lock dashboard** to clear the elevated session or sign out when finished.
 
-For hosting, configure `CQ_GAME_MASTER_KEY` as a secret with at least 32 characters, ideally generated from 32 random bytes. Keep it outside version control and use a different value from the maintenance key. The existing administrator designation identifies the owner by immutable account ID. Apply the Game Master database migration before deploying. Use only a disposable local database for test accounts.
+For hosting, configure `CQ_GAME_MASTER_KEY` as a secret with at least 32 characters, ideally generated from 32 random bytes. Keep it outside version control and use a different value from the maintenance key. The existing administrator designation identifies the owner by immutable account ID. Apply the Game Master database migration before deploying. Without a configured owner key, both workshops show a setup message for the designated owner and require setup before accepting changes. Players can still open assigned cases and save progress. Use only a disposable local database for test accounts.
 
 ## Common tasks
 
@@ -32,6 +32,14 @@ Verified snapshots are stored on the server. The JSON download is a separate pri
 
 ```sh
 npx playwright test --config=playwright.game-master.config.js
+```
+
+To verify setup with no owner key, run this in PowerShell:
+
+```powershell
+$env:PW_DISABLE_OWNER_KEY = '1'
+npx playwright test tests/reading-no-owner-key.spec.js
+Remove-Item Env:PW_DISABLE_OWNER_KEY
 ```
 
 The test uses disposable accounts, a dedicated SQLite database, and synthetic keys. It runs in touch-emulated Chromium and WebKit. It does not use live accounts.

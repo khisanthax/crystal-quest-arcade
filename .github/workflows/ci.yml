@@ -41,6 +41,10 @@ jobs:
       - run: npm run test:browser -- --project=${{ matrix.engine }} --shard=${{ matrix.shard }}/2
       - if: matrix.shard == 1
         run: npx playwright test --config=playwright.game-master.config.js --project=${{ matrix.engine }}
+      - if: matrix.shard == 1
+        run: npx playwright test tests/reading-no-owner-key.spec.js --project=${{ matrix.engine }}
+        env:
+          PW_DISABLE_OWNER_KEY: '1'
       - uses: actions/upload-artifact@v4
         if: failure()
         with:

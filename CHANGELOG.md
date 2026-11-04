@@ -1,5 +1,10 @@
 # Changelog
 
+## Sites v30
+
+- Require owner elevation for homework publication and study content administration, including fresh installs with no configured owner key.
+- Keep ordinary reading and cloud saves available when owner tools are locked.
+
 ## Sites v29
 
 - Replace owned treats or accessories atomically, with a preview of equipment changes.
