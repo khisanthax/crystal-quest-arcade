@@ -2,7 +2,7 @@ import {test,expect} from '@playwright/test';
 import {readFile} from 'node:fs/promises';
 import {unlockGameMaster} from './reading/admin-fixture.mjs';
 import {readingFixture} from './reading/fixture.mjs';
-import {keywordStep,proveQuestion,paperMission} from './reading/guided-browser.mjs';
+import {keywordStep,paperMission} from './reading/guided-browser.mjs';
 test('administrator form publishes durable assigned homework; child cannot read drafts, answer keys, or publish',async({page,browser,baseURL},info)=>{
  test.skip(!process.env.CQ_GAME_MASTER_TEST_KEY,'Owner access is disabled in this test run.');
  test.setTimeout(100000);const key=(await readFile('.local/maintenance-key','utf8')).trim(),accounts=[];
@@ -34,7 +34,29 @@ test('administrator form publishes durable assigned homework; child cannot read 
   await cp.getByRole('button',{name:'Published garden investigation'}).tap();
   await expect(cp.locator('.keyword-question')).toContainText('choose beans to plant');
   await keywordStep(cp,pack.questions[0]);
-  await proveQuestion(cp,pack,pack.questions[0]);
+  await cp.evaluate(()=>{
+   const fetch=window.fetch.bind(window);
+   window.fetch=(url,options)=>{
+    if(url==='/api/reading-check'&&JSON.parse(options.body).kind==='evidence'){
+     window.fetch=fetch;
+     return new Promise((_,reject)=>{window.failEvidenceCheck=()=>reject(new TypeError('Network error'));});
+    }
+    return fetch(url,options);
+   };
+  });
+  const action=cp.locator('[data-primary]');
+  await action.tap();
+  await cp.locator('[data-sentence="1"]').tap();
+  await action.tap();
+  await expect(cp.locator('#evidence-feedback')).toHaveText('Checking your evidence…');
+  await expect(action).toBeDisabled();
+  await cp.evaluate(()=>window.failEvidenceCheck());
+  await expect(cp.locator('#evidence-feedback')).toContainText('Check your connection and try again');
+  await expect(action).toBeEnabled();
+  await expect(cp.locator('[data-sentence="1"]')).toHaveClass(/pending/);
+  await action.tap();
+  await expect(action).toHaveText('YES, I FOUND IT!');
+  await expect(cp.locator('[data-sentence="1"]')).toHaveClass(/current-verified/);
   await paperMission(cp,pack.questions[0],{mainIdea:{...publicCase.paragraphs[0].mainIdea,answer:0}});
   await expect(cp.locator('.guided')).toHaveAttribute('data-mission','q2');
   await expect.poll(async()=>{

@@ -21,6 +21,35 @@ async function seed(page,pack=readingFixture()){
  await continueCase(page);
 }
 test('three illustrated modes and the empty case library fit iPad landscape without fabricated homework',async({page},info)=>{await page.goto('/');for(const id of ['ari','kal']){await page.locator('#choose-'+id).tap();await expect(page.locator('.mode-card')).toHaveCount(3);for(const size of [{width:1024,height:768},{width:1194,height:834},{width:844,height:390}]){await page.setViewportSize(size);for(const selector of ['#new-run','#original-play','#reading-play']){const b=await page.locator(selector).boundingBox();expect(b.height).toBeGreaterThanOrEqual(44);expect(b.y+b.height).toBeLessThanOrEqual(size.height+1);}await page.screenshot({path:info.outputPath(`reading-modes-${id==='ari'?'emberia':'luminara'}-${size.width}-${info.project.name}.png`)});}await page.locator('#reading-play').tap();await expect(page.locator('.case-empty')).toContainText('No homework has been invented');await page.locator('#reading-back').tap();await page.locator('#home').tap();}});
+test('compact landscape shows evidence instructions and results beside the action',async({page})=>{
+ const pack=readingFixture();
+ await page.setViewportSize({width:844,height:390});
+ await seed(page,pack);
+ await keywordStep(page,pack.questions[0]);
+ await primary(page).tap();
+ const feedback=page.locator('#evidence-feedback');
+ const expectVisibleFeedback=async message=>{
+  await expect(feedback).toContainText(message);
+  await expect(feedback).toBeInViewport({ratio:1});
+  await expect(primary(page)).toBeInViewport({ratio:1});
+ };
+ await expect(primary(page)).toHaveText('CHECK MY EVIDENCE');
+ await primary(page).tap();
+ await expectVisibleFeedback('Tap a sentence to highlight it');
+
+ const wrong=page.locator('[data-sentence="0"]');
+ await wrong.tap();
+ await expect(wrong).toHaveClass(/pending/);
+ await primary(page).tap();
+ await expectVisibleFeedback('Keep it yellow');
+ await expect(wrong).toHaveClass(/pending/);
+
+ const correct=page.locator('[data-sentence="1"]');
+ await correct.tap();
+ await primary(page).tap();
+ await expect(primary(page)).toHaveText('YES, I FOUND IT!');
+ await expect(correct).toHaveClass(/current-verified/);
+});
 test('paragraph navigation never asks a quiz, and confirming evidence asks about its primary paragraph',async({page})=>{
  const pack=readingFixture(),q=pack.questions[0];
  q.evidence.push(pack.questions[2].evidence[0]);
