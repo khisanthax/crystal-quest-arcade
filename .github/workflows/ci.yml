@@ -26,6 +26,11 @@ jobs:
   browser:
     # Keep browser/system dependencies on a reviewed LTS image.
     runs-on: ubuntu-24.04
+    container:
+      # Keep this version in sync with package-lock.json. Browsers and their
+      # system libraries are already installed; CI never waits on apt mirrors.
+      image: mcr.microsoft.com/playwright:v1.64.1-noble@sha256:2f05f8a734509a7b3f26a912639488ee08f58a7b292d14d62271bcff9038768f
+      options: --init --ipc=host
     timeout-minutes: 35
     strategy:
       fail-fast: false
@@ -40,13 +45,8 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
-      - name: Install Playwright browser and system dependencies
-        timeout-minutes: 8
-        env:
-          PLAYWRIGHT_ENGINE: ${{ matrix.engine }}
-        # The native step timeout cleans up the process tree. An inner timeout
-        # left sudo/apt children alive, so its retry immediately hit an apt lock.
-        run: npx playwright install --with-deps "$PLAYWRIGHT_ENGINE"
+      - name: Verify pinned browser image matches the project
+        run: node -e "if(require('@playwright/test/package.json').version !== '1.64.1') throw new Error('Update the CI browser image with package-lock.json')"
       - run: npm run test:browser -- --project=${{ matrix.engine }} --shard=${{ matrix.shard }}/2
       - if: matrix.shard == 1
         run: npx playwright test --config=playwright.game-master.config.js --project=${{ matrix.engine }}
