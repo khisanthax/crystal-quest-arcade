@@ -1,0 +1,17 @@
+# Crystal Quest: Changing Earth
+
+Open the Arcade, choose **Emberia** or **Luminara**, and tap the illustrated **Changing Earth** expedition beside Practice for Test. This is a fixed Grade 4 review expedition; it does not replace the selected school test or any existing adventure.
+
+Explore five side-view zones with the Arcade's shared platform physics and multitouch controls. Hold an arrow, jump for trail crystals, and reach each glowing gate. Gates contain Crystal Choice, two-column crystal matching, Magma or Lava classification, rock-building machines, Weathering Attack, Desert Builder, Erosion Defender, and Slow or Fast sorting. Correct responses transform the illustrated scene. A nine-task final challenge covers all eight mastery groups with randomized/adaptive questions and answer positions. The Field Guide preserves the supplied definitions and facts.
+
+The eight groups track fifteen distinct review ideas. First-attempt correct, incorrect attempts, later correct attempts and dates use the existing mastery-record helpers. Three stars require first-attempt success without outstanding review flags for every idea in the group. A later retry never becomes first-attempt mastery. Missed ideas get priority on replay, followed by unseen material. Learning and run score continue even after the currency limit is reached.
+
+The existing profile wallet, transaction history, pet XP, cloud queue, account recovery, local save, and JSON backup are reused. A shared-wallet reward is paid once per question or trail crystal per UTC day. Answers earn two crystals first try or one after retry; a trail crystal earns one; finishing can earn five. All rewards together are capped at **60 crystals / 120 pet XP per day** for this game. A completion badge appears on the existing rewards shelf. Reloading, rewinding a course or restarting cannot repeat a paid proof. Existing modes keep their original reward limits.
+
+Progress is stored under the selected profile's optional `changingEarth` field. Trials and reward claims are separate from the current run so restarting cannot rewind them. Server save validation checks the same original content and completed-response proofs, immutable paid claims, per-profile IDs, daily limits, wallet transactions and pet XP. No database migration, new account, paid service or backend secret is needed. Existing accounts, catalogs and homework cases are retained. Earlier offline reward dates remain valid when synchronizing; future-dated claims are rejected.
+
+New source: `dist/changing-earth/{content,model,art,ui}.js` and `style.css`. Integration points: the existing mode menu, application shell, save validator, index stylesheet and account economy validator. The existing shared pointer helper now tolerates unavailable pointer capture without leaving controls stuck.
+
+Tests: `tests/changing-earth/model.test.mjs` covers exact content, full model completion, mastery/replay, rewards/forgery, backup and real disposable cloud API round trips. `tests/changing-earth.spec.js` operates actual menus, movement/jump controls and all eight challenge styles through to the trophy, retries, refresh, replay, both profiles, pointer cancellation and landscape layouts. Touch emulation is not physical iPad Safari verification.
+
+Run `npm run check`, `npm run lint`, `npm test`, `npm run build`, then `npx playwright test tests/changing-earth.spec.js` (Chromium and WebKit). The standard build includes the new assets in the offline cache and existing Worker deployment.

@@ -1,4 +1,5 @@
 import {ensureJourneys,stageKey} from './journeys.js';
+import {validEarth} from '../changing-earth/model.js';
 import {validSave} from '../shared/saves.js';
 import {ensureLevels,validLevels,courseKey,migrateLevelHistory} from './levels.js';
 import {validRewards} from './rewards.js';
@@ -21,6 +22,7 @@ export function validateBackup(d){
  const settings=s=>s&&Number.isInteger(s.lanes)&&s.lanes>=3&&s.lanes<=8&&Number.isFinite(s.speed)&&s.speed>=7&&s.speed<=26&&Number.isInteger(s.interval)&&s.interval>=2&&s.interval<=20;
  for(const id of ['ari','kal']){
   const p=d.profiles[id];if(!p||!d.packs[p.activePack]||!p.learning||!p.runs||!Array.isArray(p.rewards)||![p.crystals,p.highScore,p.sessions].every(n=>Number.isFinite(n)&&n>=0)||!settings(p.settings)||!Object.hasOwn(WORLDS,p.theme)||!validateCollection(p.collection)||!validLevels(p,d.packs)||!validRewards(p))return false;
+  if(!validEarth(p.changingEarth))return false;
   for(const m of Object.values(p.originalCourses||{}))if(!m?.ledger||!validSave(id,m.progress))return false;for(const mode of ['runner','original'])for(const [world,j]of Object.entries(p.journeys?.[mode]||{}))if(!Object.hasOwn(WORLDS,world)||!Array.isArray(j?.completed)||j.completed.some(n=>!Number.isInteger(n)||n<0||n>2))return false;for(const h of Object.values(p.learning)){if(!h?.questions||!h.concepts)return false;for(const r of [...Object.values(h.questions),...Object.values(h.concepts)])for(const k of ['presented','firstCorrect','incorrect','laterCorrect','correct','review'])if(!Number.isFinite(r?.[k])||r[k]<0)return false;}
   for(const [key,r]of [...Object.entries(p.runs),...Object.entries(p.courses||{}),...Object.entries(p.stageCourses||{}),...Object.entries(p.originalCourses||{}).map(([k,m])=>[k,m.ledger])]){
    if(!r||(key!==r.packId&&key!==courseKey(r.packId,r.theme)&&key!==stageKey(r.packId,r.theme,r.stage))||r.profile!==id||!d.packs[r.packId]||!r.player||!settings(r.settings)||!Object.hasOwn(WORLDS,r.theme)||![r.distance,r.time,r.crystals,r.score,r.player.x,r.player.lane,r.player.y,r.player.vy,r.hearts,r.nextGroup,r.spawnIndex,r.successful,r.sinceGate,r.stageGates].every(Number.isFinite)||r.hearts<0||r.hearts>3||!Number.isInteger(r.stage)||r.stage<0||r.stage>2||!['running','question','paused','stage','victory'].includes(r.mode)||!r.stock||!['groups','gems','portals','pickups','projectiles','bursts'].every(k=>Array.isArray(r[k])&&r[k].length<1000))return false;
