@@ -24,7 +24,8 @@ jobs:
       - run: npm test
       - run: npm run build
   browser:
-    runs-on: ubuntu-latest
+    # Keep browser/system dependencies on a reviewed LTS image.
+    runs-on: ubuntu-24.04
     timeout-minutes: 35
     strategy:
       fail-fast: false
@@ -43,14 +44,9 @@ jobs:
         timeout-minutes: 8
         env:
           PLAYWRIGHT_ENGINE: ${{ matrix.engine }}
-        run: |
-          for attempt in 1 2; do
-            if timeout --kill-after=10s 210s npx playwright install --with-deps "$PLAYWRIGHT_ENGINE"; then
-              exit 0
-            fi
-            echo "Playwright installation attempt $attempt failed."
-          done
-          exit 1
+        # The native step timeout cleans up the process tree. An inner timeout
+        # left sudo/apt children alive, so its retry immediately hit an apt lock.
+        run: npx playwright install --with-deps "$PLAYWRIGHT_ENGINE"
       - run: npm run test:browser -- --project=${{ matrix.engine }} --shard=${{ matrix.shard }}/2
       - if: matrix.shard == 1
         run: npx playwright test --config=playwright.game-master.config.js --project=${{ matrix.engine }}
