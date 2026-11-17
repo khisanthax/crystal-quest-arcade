@@ -7,5 +7,6 @@
 @media(max-height:470px) and (orientation:landscape){.earth-matching{grid-template-columns:1.5fr 1fr;gap:7px}.earth-game .earth-match-target{font-size:14px;min-height:70px;padding:7px}.earth-match-target small{font-size:10px;margin-top:5px}.earth-game .earth-matching .earth-answers{grid-template-columns:repeat(3,1fr)}.earth-game .earth-matching .earth-answers button{font-size:12px;overflow-wrap:anywhere}}
 /* Keep fractional WebKit grid edges inside the task's scroll container. */
 .earth-task{padding-inline:2px}
+@media(max-height:470px) and (orientation:landscape){.earth-game .earth-matching .earth-answers button{padding-inline:3px;overflow-wrap:normal}}
 .earth-sand-grain{animation:earth-drift 2.8s linear infinite}.earth-visual-plants.earth-success path[stroke="#976744"]{stroke-dasharray:500;animation:earth-root-grow .9s ease-out}@keyframes earth-drift{from{transform:translateX(-35px);opacity:0}20%{opacity:1}to{transform:translateX(80px);opacity:0}}@keyframes earth-root-grow{from{stroke-dashoffset:500}to{stroke-dashoffset:0}}
 @media(prefers-reduced-motion:reduce){.earth-success,.earth-science-effect,.earth-pet,.earth-sand-grain,.earth-visual-plants.earth-success path[stroke="#976744"]{animation:none}}
