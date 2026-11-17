@@ -8,5 +8,9 @@
 /* Keep fractional WebKit grid edges inside the task's scroll container. */
 .earth-task{padding-inline:2px}
 @media(max-height:470px) and (orientation:landscape){.earth-game .earth-matching .earth-answers button{padding-inline:3px;overflow-wrap:normal}}
+/* The legacy compact Continue layout places Practice in a named grid area.
+   Its new wrapper needs its own area; do not let that rule create implicit
+   rows inside the nested two-button grid. */
+@media(max-height:470px) and (orientation:landscape){.mode-menu.with-continue{grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,1.05fr);grid-template-areas:'top top top' 'test test test' 'resume resume resume' 'cards cards cards' 'extras extras shortcuts'}.with-continue .study-adventures{grid-area:extras;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;min-width:0}.with-continue .study-adventures .practice-strip{grid-area:auto;min-width:0;padding:4px 8px!important;gap:7px}.with-continue .earth-entry{min-width:0;padding:4px 8px!important;gap:7px}.with-continue .earth-entry>svg{width:42px;height:30px}.with-continue .mode-shortcuts{min-width:0}}
 .earth-sand-grain{animation:earth-drift 2.8s linear infinite}.earth-visual-plants.earth-success path[stroke="#976744"]{stroke-dasharray:500;animation:earth-root-grow .9s ease-out}@keyframes earth-drift{from{transform:translateX(-35px);opacity:0}20%{opacity:1}to{transform:translateX(80px);opacity:0}}@keyframes earth-root-grow{from{stroke-dashoffset:500}to{stroke-dashoffset:0}}
 @media(prefers-reduced-motion:reduce){.earth-success,.earth-science-effect,.earth-pet,.earth-sand-grain,.earth-visual-plants.earth-success path[stroke="#976744"]{animation:none}}
