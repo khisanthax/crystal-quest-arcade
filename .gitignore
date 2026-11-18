@@ -19,6 +19,7 @@ dist/.openai/
 
 test-results-reading*/
 test-results-cloud*/
+test-results-earth*/
 artifacts/cloud-*.png
 
 test-results-blast-slide/
